@@ -10,7 +10,9 @@
 
         pkgs = import nixpkgs { inherit system; };
 
-        xil = pkgs.callPackage ./package.nix { };
+        xil = pkgs.callPackage ./package.nix {
+          cppitertools = pkgs.callPackage ./cppitertools.nix { };
+        };
 
       in {
         packages.default = xil;

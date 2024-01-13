@@ -14,6 +14,7 @@ project(
 dep_names = [
   'fmt',
   'boost',
+  'cppitertools',
   'nix-cmd',
   'nix-expr',
   'nix-store',
@@ -27,6 +28,7 @@ endforeach
 
 srcs = [
   'src/main.cpp',
+  'src/xil.cpp',
 ]
 
 executable('xil', srcs, dependencies : deps, install : true)

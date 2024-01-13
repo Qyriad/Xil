@@ -128,63 +128,6 @@ std::string makeIndent(uint32_t level)
 	return ss.str();
 }
 
-#define TYPENAME(expr) (boost::core::demangle(typeid(expr).name()))
-
-size_t const EXPR_VAR = typeid(nix::ExprVar).hash_code();
-size_t const EXPR_SELECT = typeid(nix::ExprSelect).hash_code();
-size_t const EXPR_OP_HAS_ATTR = typeid(nix::ExprOpHasAttr).hash_code();
-size_t const EXPR_ATTRS = typeid(nix::ExprAttrs).hash_code();
-size_t const EXPR_LIST = typeid(nix::ExprList).hash_code();
-size_t const EXPR_LAMBDA = typeid(nix::ExprLambda).hash_code();
-size_t const EXPR_CALL = typeid(nix::ExprCall).hash_code();
-size_t const EXPR_LET = typeid(nix::ExprLet).hash_code();
-size_t const EXPR_STRING = typeid(nix::ExprString).hash_code();
-// FIXME: more
-
-#define HANDLER(kind_constant, kind_type, lambda) { \
-	kind_constant, [&](nix::Expr &rawExpr) -> std::optional<std::string> { \
-		auto &expr = dynamic_cast<kind_type>(rawExpr); \
-		return lambda(expr); \
-	} \
-}
-
-struct ExprT
-{
-	using VariantT = std::variant<
-		nix::ExprVar *,
-		nix::ExprCall *,
-		nix::ExprString *,
-		nix::ExprLambda *,
-		nix::ExprList *,
-		nix::ExprSelect *
-	>;
-
-	static VariantT from(nix::Expr *value)
-	{
-		using namespace nix;
-		std::unordered_map<size_t, VariantT> handlers = {
-			{ EXPR_VAR, dynamic_cast<ExprVar *>(value) },
-			{ EXPR_CALL, dynamic_cast<ExprCall *>(value) },
-			{ EXPR_STRING, dynamic_cast<ExprString *>(value) },
-			{ EXPR_LAMBDA, dynamic_cast<ExprLambda *>(value) },
-			{ EXPR_LIST, dynamic_cast<ExprList *>(value) },
-			{ EXPR_SELECT, dynamic_cast<ExprSelect *>(value) },
-		};
-
-		try {
-			return handlers.at(typeid(*value).hash_code());
-		} catch (std::out_of_range &ex) {
-			eprintln("No handler for {}", TYPENAME(*value));
-			throw;
-		}
-	}
-};
-
-template<typename... Ts>
-struct overloaded : Ts... { using Ts::operator()...; };
-template<typename... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
 // Not all expressions have a name.
 std::optional<std::string> exprName(nix::Expr *expr, nix::SymbolTable &symbols)
 {
@@ -323,7 +266,7 @@ void printValue(nix::Value &value, nix::EvalState &state, std::ostream &out, See
 					auto ch = *charIt;
 					switch (ch) {
 						case '\\':
-							out << "\\" << ch;
+							out << "\\";
 							break;
 						case '\n': {
 							out << "\n";
@@ -510,8 +453,11 @@ void printValue(nix::Value &value, nix::EvalState &state, std::ostream &out, See
 	}
 }
 
-int main(int, char *argv[])
+int main(int argc, char *argv[])
 {
+	// Initialize an args vector from the argv range.
+	std::vector<std::string> arguments(&argv[0], &argv[argc]);
+
 	nix::initNix();
 	nix::initGC();
 
@@ -523,18 +469,22 @@ int main(int, char *argv[])
 	auto store = nix::openStore();
 
 	// FIXME: allow specifying SearchPath from command line.
-	nix::EvalState state(nix::SearchPath{}, store, store);
+	//nix::EvalState state(nix::SearchPath{}, store, store);
+	auto state = std::make_shared<nix::EvalState>(nix::SearchPath{}, store, store);
 
-	std::string exprStr = std::string(argv[1]);
+	auto exprStr = arguments.at(1);
 
-	nix::Expr *fileExpr = state.parseExprFromString(exprStr, state.rootPath(nix::CanonPath::fromCwd()));
+	nix::Expr *fileExpr = state->parseExprFromString(exprStr, state->rootPath(nix::CanonPath::fromCwd()));
 	nix::Value rootVal;
-	state.eval(fileExpr, rootVal);
+	state->eval(fileExpr, rootVal);
 
 	Seen seenSet;
 
+	Printer printer(state);
+
 	try {
-		printValue(rootVal, state, std::cout, seenSet);
+		//printValue(rootVal, state, std::cout, seenSet);
+		printer.printValue(rootVal, std::cout, 0);
 	} catch (nix::Interrupted &ex) {
 		eprintln("Interrupted: {}", ex.msg());
 	}

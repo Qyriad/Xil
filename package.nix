@@ -4,9 +4,11 @@
   meson,
   ninja,
   pkg-config,
+  cmake, # To find cppitertools
   fmt,
   nix,
   boost,
+  cppitertools,
   clang,
   python3,
 }:
@@ -28,6 +30,8 @@ stdenv.mkDerivation (self: {
     fmt
     nix
     boost
+    cppitertools
+    cmake
   ];
 
   nativeCheckInputs = [
