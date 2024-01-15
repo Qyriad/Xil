@@ -6,12 +6,18 @@
 #include <string>
 #include <string_view>
 
+// Nix headers.
 #include <config.h>
 #include <shared.hh>
 #include <eval.hh>
 
 #include <boost/core/demangle.hpp>
 #include <fmt/core.h>
+
+namespace nix
+{
+	std::string_view format_as(nix::ValueType const type) noexcept;
+}
 
 // Exactly like fmt::print, but prints to stderr.
 template <typename ... T>
@@ -89,8 +95,11 @@ struct overloaded : Ts... { using Ts::operator()...; };
 template<typename... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
-struct Indent {
+// Has a fmt::format_as, and an operator<<.
+struct Indent
+{
 	uint32_t level;
+	friend std::ostream &operator<<(std::ostream &out, Indent const &self);
 };
 
 struct Printer

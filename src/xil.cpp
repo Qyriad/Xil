@@ -1,4 +1,5 @@
 #include "xil.hpp"
+#include "attriter.hpp"
 
 #include <iterator>
 
@@ -8,6 +9,38 @@
 
 // Nix headers.
 #include <print.hh>
+
+using namespace std::literals::string_literals;
+
+std::string_view nix::format_as(nix::ValueType const type) noexcept
+{
+	switch (type) {
+		case nix::nThunk:
+			return "thunk";
+		case nix::nInt:
+			return "integer";
+		case nix::nFloat:
+			return "float";
+		case nix::nBool:
+			return "bool";
+		case nix::nString:
+			return "string";
+		case nix::nPath:
+			return "path";
+		case nix::nNull:
+			return "null";
+		case nix::nAttrs:
+			return "attrs";
+		case nix::nList:
+			return "list";
+		case nix::nFunction:
+			return "function";
+		case nix::nExternal:
+			return "external?";
+		default:
+			return "«unreachable»";
+	}
+}
 
 std::optional<nix::SymbolStr> Printer::symbol(nix::Symbol &&symbol)
 {
@@ -35,10 +68,6 @@ OptStringView Printer::symbolStrView(nix::Symbol &symbol)
 
 	return static_cast<std::string_view>(this->state->symbols[symbol]);
 }
-
-
-//void getAttrValue(nix::Bindings *attrs, std::string_view key);
-//void getAttrValue(nix::Bindings *attrs, nix::Symbol key);
 
 nix::Value *Printer::getAttrValue(nix::Bindings *attrs, nix::Symbol key)
 {
@@ -145,6 +174,13 @@ static void printIndent(std::ostream &out, uint32_t indentLevel)
 	}
 }
 
+
+std::ostream &operator<<(std::ostream &out, Indent const &self)
+{
+	printIndent(out, self.level);
+	return out;
+}
+
 // A formatter for fmt::format().
 std::string format_as(Indent const indentation)
 {
@@ -161,7 +197,6 @@ std::string prettyString(std::string_view nixString, uint32_t indentLevel)
 	auto buffer = fmt::memory_buffer();
 
 	bool multiline = nixString.find("\n") != decltype(nixString)::npos;
-	eprintln("multiline? {}", multiline);
 	if (multiline) {
 		fmt::format_to(std::back_inserter(buffer), "''\n");
 	} else {
@@ -237,8 +272,13 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 	// If there's an error, catch it and print a short version of the error.
 	// FIXME: make configurable.
 	if (value.type() == nix::nThunk) {
-		// FIXME: catch
-		this->state->forceValue(value, nix::noPos);
+		try {
+			this->state->forceValue(value, nix::noPos);
+		} catch (nix::ThrownError &ex) {
+			// FIXME: parse out error
+			out << "«throws»";
+			return;
+		}
 	}
 
 	switch (value.type()) {
@@ -268,20 +308,86 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 				auto drvPath = this->getAttrValue(value.attrs, this->state->sDrvPath);
 				assert(drvPath != nullptr);
 				out << "«derivation ";
-				printValue(*drvPath, out, indentLevel);
+				// We handle drvPath specially because anything other than a string
+				// should be invalid, and if it is a string then we don't want to print
+				// the quotes (which this->printValue() adds).
+				if (drvPath->isThunk()) {
+					try {
+						this->state->forceValue(*drvPath, nix::noPos);
+					} catch (nix::ThrownError &ex) {
+						out << "«throws»»";
+						return;
+					}
+				}
+
+				if (drvPath->type() != nix::nString) {
+					out << fmt::format("invalid {}", drvPath->type());
+				} else {
+					out << drvPath->string.s;
+				}
 				out << "»";
+
 				break;
 			}
 
-			out << "«attrs»";
-			//assert(value.attrs != nullptr);
-			//for (auto &&attr : *value.attrs) {
-			//}
+			auto attrIter = AttrIterable(value.attrs, this->state->symbols);
+
+			// FIXME: hardcodes pkgs recursion.
+			auto typeIsPkgs = std::find_if(
+				attrIter.begin(),
+				attrIter.end(),
+				[](std::tuple<std::string_view const, nix::Value const &> pair) -> bool {
+					auto const &[name, value] = pair;
+					return name == "_type" &&
+						value.type() == nix::nString &&
+						std::string_view{value.string.s} == "pkgs"s;
+				}
+			);
+			bool isPkgs = typeIsPkgs != attrIter.end();
+
+			if (isPkgs && indentLevel > 0) {
+				out << "«too deep»";
+				return;
+			}
+
+			// FIXME: better heuristics for short attrsets.
+			if (attrIter.empty()) {
+				out << "{ }";
+				return;
+			}
+
+			out << "{";
+
+			for (auto const &[name, value] : attrIter) {
+				out << "\n" << Indent(indentLevel + 1) << name << " = ";
+				std::flush(out);
+				this->printValue(value, out, indentLevel + 1);
+				out << ";";
+			}
+
+			out << "\n" << Indent(indentLevel) << "}";
+
 			break;
 		}
-		case nix::nList:
-			out << "«list»";
+		case nix::nList: {
+			// FIXME: better heuristics for short lists
+			// Things like `outputs = [ "out" ]` are annoying printed multiline.
+			if (value.listSize() == 0) {
+				out << "[ ]";
+				break;
+			}
+
+			out << "[";
+			for (auto &listItem : value.listItems()) {
+				out << "\n" << Indent(indentLevel + 1);
+				std::flush(out);
+				this->printValue(*listItem, out, indentLevel + 1);
+			}
+
+			out << "\n" << Indent(indentLevel) << "]";
+
 			break;
+		}
 		case nix::nFunction:
 			out << "«function»";
 			break;

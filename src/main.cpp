@@ -34,39 +34,6 @@ bool strIsMultiline(std::string_view sv)
 	return sv.find("\n") != std::string_view::npos;
 }
 
-namespace nix
-{
-	std::string_view format_as(nix::ValueType const type)
-	{
-		switch (type) {
-			case nix::nThunk:
-				return "thunk";
-			case nix::nInt:
-				return "integer";
-			case nix::nFloat:
-				return "float";
-			case nix::nBool:
-				return "bool";
-			case nix::nString:
-				return "string";
-			case nix::nPath:
-				return "path";
-			case nix::nNull:
-				return "null";
-			case nix::nAttrs:
-				return "attrs";
-			case nix::nList:
-				return "list";
-			case nix::nFunction:
-				return "function";
-			case nix::nExternal:
-				return "external?";
-			default:
-				return "«unreachable»";
-		}
-	}
-}
-
 void printType(nix::ValueType const &&type, std::ostream &out)
 {
 	switch (type) {

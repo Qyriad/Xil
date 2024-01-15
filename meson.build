@@ -29,6 +29,7 @@ endforeach
 srcs = [
   'src/main.cpp',
   'src/xil.cpp',
+  'src/attriter.cpp',
 ]
 
 executable('xil', srcs, dependencies : deps, install : true)
