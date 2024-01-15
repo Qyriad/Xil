@@ -17,7 +17,14 @@ stdenv.mkDerivation (self: {
   pname = "xil";
   version = "0.0.1";
 
-  src = lib.cleanSource ./.;
+  src = lib.sourceFilesBySuffices ./. [
+    "meson.build"
+    ".cpp"
+    ".hpp"
+    ".nix"
+    ".py"
+    ".md"
+  ];
 
   nativeBuildInputs = [
     meson
