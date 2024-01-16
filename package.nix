@@ -10,6 +10,7 @@
   boost,
   cppitertools,
   clang,
+  lld,
   python3,
 }:
 
@@ -26,12 +27,15 @@ stdenv.mkDerivation (self: {
     ".md"
   ];
 
+  # Workaround https://github.com/NixOS/nixpkgs/issues/19098.
+  NIX_CFLAGS_LINK = lib.optionalString stdenv.isDarwin "-fuse-ld=lld";
+
   nativeBuildInputs = [
     meson
     ninja
     pkg-config
     nix
-  ];
+  ] ++ lib.lists.optional stdenv.isDarwin lld;
 
   buildInputs = [
     fmt
