@@ -29,6 +29,10 @@ stdenv.mkDerivation (self: {
     catch2
   ];
 
+  # Required on case-sensitive filesystems to not conflict with the Bazel BUILD files.
+  # Argument for cmakeConfigurePhase in CMake's setup-hook.
+  cmakeBuildDir = "cmake-build";
+
   prePatch = ''
     # Required for tests
     cp -v ${catch2}/include/catch2/catch.hpp test/
