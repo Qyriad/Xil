@@ -43,7 +43,7 @@ stdenv.mkDerivation (self: {
   checkPhase = ''
     runHook preCheck
     cmake -B build-test -S ../test
-    cmake --build build-test
+    cmake --build build-test -j$NIX_BUILD_CORES
     runHook postCheck
   '';
 
