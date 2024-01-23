@@ -392,6 +392,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			for (auto const &[name, value] : attrIter) {
 				out << "\n" << Indent(indentLevel + 1) << name << " = ";
 				std::flush(out);
+				this->currentAttrName = name;
 				this->printValue(value, out, indentLevel + 1, depth + 1);
 				out << ";";
 			}
@@ -420,7 +421,26 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			break;
 		}
 		case nix::nFunction:
-			out << "«function»";
+			if (value.isLambda()) {
+				out << "«lambda";
+				if (value.lambda.fun != nullptr) {
+					// If our function expression's name isn't the same as the attr key we're currently in,
+					// then print `lambda NAME =`.
+					// If it has an argument name too, then that looks like `lambda NAME = ARG: …`.
+					if (this->symbolStr(value.lambda.fun->name) != this->currentAttrName) {
+						out << " " << this->symbolStr(value.lambda.fun->name).value();
+						if (value.lambda.fun->arg) {
+							out << " = " << this->symbolStr(value.lambda.fun->arg).value() << ": …";
+						}
+					} else if (value.lambda.fun->arg) {
+						out << " " << this->symbolStr(value.lambda.fun->arg).value() << ": …";
+					}
+
+				}
+				out << "»";
+			} else {
+				out << "«function»";
+			}
 			break;
 		case nix::nExternal:
 			out << "«external?»";

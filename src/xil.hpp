@@ -108,6 +108,9 @@ struct Printer
 
 	std::set<nix::Bindings *> seen;
 
+	/** Used by function printing to be Smart™. */
+	OptString currentAttrName = std::nullopt;
+
 	explicit Printer(std::shared_ptr<nix::EvalState> state) :
 		state(state)
 	{ }
