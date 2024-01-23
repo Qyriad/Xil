@@ -427,7 +427,13 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 					// If our function expression's name isn't the same as the attr key we're currently in,
 					// then print `lambda NAME =`.
 					// If it has an argument name too, then that looks like `lambda NAME = ARG: …`.
-					if (this->symbolStr(value.lambda.fun->name) != this->currentAttrName) {
+					OptString functionName = this->symbolStr(value.lambda.fun->name);
+					if (!functionName.has_value()) {
+						if (value.lambda.fun->arg) {
+							out << " " << this->symbolStr(value.lambda.fun->arg).value() << ": ";
+						}
+						out << "…";
+					} else if (functionName != this->currentAttrName) {
 						out << " " << this->symbolStr(value.lambda.fun->name).value();
 						if (value.lambda.fun->arg) {
 							out << " = " << this->symbolStr(value.lambda.fun->arg).value() << ": …";
