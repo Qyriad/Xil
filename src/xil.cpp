@@ -427,33 +427,46 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 					// If our function expression's name isn't the same as the attr key we're currently in,
 					// then print `lambda NAME =`.
 					// If it has an argument name too, then that looks like `lambda NAME = ARG: …`.
-					OptString functionName = this->symbolStr(value.lambda.fun->name);
-					if (!functionName.has_value()) {
-						if (value.lambda.fun->arg) {
-							out << " " << this->symbolStr(value.lambda.fun->arg).value() << ": ";
-						} else if (value.lambda.fun->formals) {
-							// FIXME: print formals
-							out << " { … }: ";
-						}
-						out << "…";
-					} else if (functionName != this->currentAttrName) {
-						out << " " << this->symbolStr(value.lambda.fun->name).value();
-						if (value.lambda.fun->arg) {
-							out << " = " << this->symbolStr(value.lambda.fun->arg).value() << ": …";
-						}
-					} else if (value.lambda.fun->arg) {
-						out << " " << this->symbolStr(value.lambda.fun->arg).value() << ": …";
-					} else if (value.lambda.fun->formals) {
-						// FIXME: print formals
-						out << " { … }: …";
-					}
+					// FIXME: make it clearer when it's an application of another function, if we can.
+					auto const functionName = this->symbolStr(value.lambda.fun->name);
+					auto const argName = this->symbolStr(value.lambda.fun->arg);
+					bool const needsEquals = functionName.has_value() && functionName != this->currentAttrName;
+					bool const needsSpace = needsEquals || argName.has_value() || value.lambda.fun->hasFormals();
 
+					if (needsSpace) {
+						out << " ";
+					}
+					if (needsEquals) {
+						out << functionName.value() << " = ";
+					}
+					if (argName.has_value()) {
+						out << argName.value() << ": ";
+					}
+					if (value.lambda.fun->hasFormals()) {
+						// FIXME: print formals
+						out << "{ … }: ";
+					}
 				}
-				out << "»";
+				out << "…»";
 			} else if (value.isPrimOp()) {
 				out << "«primop " << value.primOp->name << "»";
+			} else if (value.isPrimOpApp()) {
+				out << "«primopApp ";
+				auto lhsName = this->valueName(*value.primOpApp.left);
+				auto rhsName = this->valueName(*value.primOpApp.right);
+				auto needsSpace = lhsName.has_value() && rhsName.has_value();
+				if (lhsName.has_value()) {
+					out << lhsName.value();
+				}
+				if (needsSpace) {
+					out << " ";
+				}
+				if (rhsName.has_value()) {
+					out << rhsName.value();
+				}
+				out << "»";
 			} else {
-				out << "«function»";
+				assert("unreachable" == nullptr);
 			}
 			break;
 		case nix::nExternal:
