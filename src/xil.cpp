@@ -431,6 +431,9 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 					if (!functionName.has_value()) {
 						if (value.lambda.fun->arg) {
 							out << " " << this->symbolStr(value.lambda.fun->arg).value() << ": ";
+						} else if (value.lambda.fun->formals) {
+							// FIXME: print formals
+							out << " { … }: ";
 						}
 						out << "…";
 					} else if (functionName != this->currentAttrName) {
@@ -440,10 +443,15 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 						}
 					} else if (value.lambda.fun->arg) {
 						out << " " << this->symbolStr(value.lambda.fun->arg).value() << ": …";
+					} else if (value.lambda.fun->formals) {
+						// FIXME: print formals
+						out << " { … }: …";
 					}
 
 				}
 				out << "»";
+			} else if (value.isPrimOp()) {
+				out << "«primop " << value.primOp->name << "»";
 			} else {
 				out << "«function»";
 			}
