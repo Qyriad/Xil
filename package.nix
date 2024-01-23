@@ -39,7 +39,7 @@ stdenv.mkDerivation (self: {
 
   buildInputs = [
     fmt
-    nix
+    (nix.overrideAttrs { separateDebugInfo = true; })
     boost
     cppitertools
     cmake

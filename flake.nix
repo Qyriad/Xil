@@ -16,10 +16,7 @@
 
       in {
         packages.default = xil;
-        devShells.default = pkgs.mkShell {
-          packages = [ pkgs.clang-tools ];
-          inputsFrom = [ xil ];
-        };
+        devShells.default = import ./shell.nix { inherit pkgs; };
       }
 
     ) # eachDefaultSystem

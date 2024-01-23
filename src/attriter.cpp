@@ -2,14 +2,14 @@
 
 AttrKeyValueIter::reference AttrKeyValueIter::operator*() const
 {
-	std::string const &name = this->symbols[this->current->name];
+	std::string const &name = (*this->symbols)[this->current->name];
 	nix::Value &value = *this->current->value;
 	return std::tie(name, value);
 }
 
 AttrKeyValueIter::pointer AttrKeyValueIter::operator->()
 {
-	std::string const &name = this->symbols[this->current->name];
+	std::string const &name = (*this->symbols)[this->current->name];
 	nix::Value *value = this->current->value;
 	return std::tie(name, value);
 }
@@ -35,20 +35,20 @@ AttrKeyValueIter & AttrKeyValueIter::operator=(AttrKeyValueIter const &rhs) noex
 
 AttrKeyValueIter AttrIterable::begin() const
 {
-	return AttrKeyValueIter(this->attrs->begin(), this->symbols);
+	return AttrKeyValueIter(this->attrs->begin(), &this->symbols);
 }
 
 AttrKeyValueIter AttrIterable::end() const
 {
-	return AttrKeyValueIter(this->attrs->end(), this->symbols);
+	return AttrKeyValueIter(this->attrs->end(), &this->symbols);
 }
 
-size_t AttrIterable::size() const noexcept
+size_t AttrIterable::size() const
 {
 	return this->attrs->size();
 }
 
-bool AttrIterable::empty() const noexcept {
+bool AttrIterable::empty() const {
 	return this->size() == 0;
 }
 

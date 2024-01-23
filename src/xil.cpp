@@ -9,6 +9,7 @@
 
 // Nix headers.
 #include <print.hh>
+#include <nixexpr.hh>
 
 using namespace std::literals::string_literals;
 
@@ -40,6 +41,22 @@ std::string_view nix::format_as(nix::ValueType const type) noexcept
 		default:
 			return "«unreachable»";
 	}
+}
+
+/** Attempts to get the error message itself (without traces) from a Nix error string. */
+OptStringView stringErrorLine(std::string_view sv)
+{
+	std::string_view const searchingFor = "error:\x1b[0m";
+	auto errorStart = sv.rfind(searchingFor);
+	if (errorStart == decltype(sv)::npos) {
+		return std::nullopt;
+	}
+
+	auto newline = sv.find("\n", errorStart);
+
+	auto start = errorStart + searchingFor.size() + 1;
+
+	return sv.substr(start, newline - start);
 }
 
 std::optional<nix::SymbolStr> Printer::symbol(nix::Symbol &&symbol)
@@ -263,22 +280,26 @@ std::string prettyString(std::string_view nixString, uint32_t indentLevel)
 	return fmt::to_string(buffer);
 }
 
-void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLevel)
-{
-	// FIXME
-	assert(indentLevel < 100);
 
-	// If we have a thunk, *try* to force it before we print it.
+void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLevel, uint32_t depth)
+{
+	nix::checkInterrupt();
+
+	// FIXME
+	if (indentLevel > 10) {
+		out << "«early too deep»";
+		return;
+	}
+
+	// *Try* to force this value before we print it.
 	// If there's an error, catch it and print a short version of the error.
+	// We used to only force thunks, but Nix doesn't seem to like its values
+	// being forced out of order.
 	// FIXME: make configurable.
-	if (value.type() == nix::nThunk) {
-		try {
-			this->state->forceValue(value, nix::noPos);
-		} catch (nix::ThrownError &ex) {
-			// FIXME: parse out error
-			out << "«throws»";
-			return;
-		}
+	OptString maybeForceErrorMessage = this->safeForce(value);
+	if (maybeForceErrorMessage.has_value()) {
+		out << "«" << maybeForceErrorMessage.value() << "»";
+		return;
 	}
 
 	switch (value.type()) {
@@ -306,16 +327,18 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 		case nix::nAttrs: {
 			if (this->state->isDerivation(value)) {
 				auto drvPath = this->getAttrValue(value.attrs, this->state->sDrvPath);
-				assert(drvPath != nullptr);
 				out << "«derivation ";
 				// We handle drvPath specially because anything other than a string
 				// should be invalid, and if it is a string then we don't want to print
 				// the quotes (which this->printValue() adds).
+				if (drvPath == nullptr) {
+					out << "???»";
+					return;
+				}
 				if (drvPath->isThunk()) {
-					try {
-						this->state->forceValue(*drvPath, nix::noPos);
-					} catch (nix::ThrownError &ex) {
-						out << "«throws»»";
+					OptString maybeForceErrorMessage = this->safeForce(*drvPath);
+					if (maybeForceErrorMessage.has_value()) {
+						out << "«" << maybeForceErrorMessage.value() << "»»";
 						return;
 					}
 				}
@@ -332,6 +355,21 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 
 			auto attrIter = AttrIterable(value.attrs, this->state->symbols);
 
+			// FIXME: better heuristics for short attrsets.
+			if (attrIter.empty()) {
+				out << "{ }";
+				return;
+			}
+
+			if (!this->seen.insert(value.attrs).second) {
+				out << "«repeated";
+				if (value.type() == nix::nAttrs) {
+					this->printRepeatedAttrs(value.attrs, out);
+				}
+				out << "»";
+				return;
+			}
+
 			// FIXME: hardcodes pkgs recursion.
 			auto typeIsPkgs = std::find_if(
 				attrIter.begin(),
@@ -344,15 +382,8 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 				}
 			);
 			bool isPkgs = typeIsPkgs != attrIter.end();
-
 			if (isPkgs && indentLevel > 0) {
 				out << "«too deep»";
-				return;
-			}
-
-			// FIXME: better heuristics for short attrsets.
-			if (attrIter.empty()) {
-				out << "{ }";
 				return;
 			}
 
@@ -361,7 +392,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			for (auto const &[name, value] : attrIter) {
 				out << "\n" << Indent(indentLevel + 1) << name << " = ";
 				std::flush(out);
-				this->printValue(value, out, indentLevel + 1);
+				this->printValue(value, out, indentLevel + 1, depth + 1);
 				out << ";";
 			}
 
@@ -381,7 +412,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			for (auto &listItem : value.listItems()) {
 				out << "\n" << Indent(indentLevel + 1);
 				std::flush(out);
-				this->printValue(*listItem, out, indentLevel + 1);
+				this->printValue(*listItem, out, indentLevel + 1, depth + 1);
 			}
 
 			out << "\n" << Indent(indentLevel) << "]";
@@ -395,4 +426,52 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			out << "«external?»";
 			break;
 	}
+}
+
+void Printer::printRepeatedAttrs(nix::Bindings *attrs, std::ostream &out)
+{
+	std::vector<std::string> firstFewNames;
+	for (auto const &[innerName, innerValue] : AttrIterable(attrs, this->state->symbols)) {
+		firstFewNames.push_back(innerName);
+		// FIXME: make configurable.
+		if (firstFewNames.size() > 2) {
+			break;
+		}
+	}
+	firstFewNames.push_back("…");
+
+	out << fmt::format(" {}", fmt::join(firstFewNames, ", "));
+}
+
+OptString Printer::safeForce(nix::Value &value, nix::PosIdx position)
+{
+	try {
+		this->state->forceValue(value, position);
+	} catch (nix::ThrownError &ex) {
+		auto msg = ex.msg();
+		auto throwLine = stringErrorLine(msg);
+		if (throwLine.has_value()) {
+			return fmt::format("throws: {}", throwLine.value());
+		}
+		return "throws";
+	} catch (nix::AssertionError &ex) {
+		auto errorLine = stringErrorLine(ex.msg());
+		if (errorLine.has_value()) {
+			return fmt::format("assertion error: {}", errorLine.value());
+		}
+		return "assertion error";
+	} catch (nix::EvalError &ex) {
+		auto errorLine = stringErrorLine(ex.msg());
+		if (errorLine.has_value()) {
+			return fmt::format("eval error: {}", errorLine.value());
+		}
+		return "throws";
+	} catch (nix::Error &ex) {
+		if (ex.msg().find("allow-import-from-derivation")) {
+			return "IFD error";
+		}
+		throw;
+	}
+
+	return std::nullopt;
 }

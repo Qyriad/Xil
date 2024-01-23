@@ -83,7 +83,7 @@ struct ExprT
 
 		try {
 			return handlers.at(typeid(*value).hash_code());
-		} catch (std::out_of_range &ex) {
+		} catch ([[maybe_unused]] std::out_of_range &ex) {
 			eprintln("No handler for {}", TYPENAME(*value));
 			throw;
 		}
@@ -106,8 +106,11 @@ struct Printer
 {
 	std::shared_ptr<nix::EvalState> state;
 
+	std::set<nix::Bindings *> seen;
+
 	explicit Printer(std::shared_ptr<nix::EvalState> state) :
-		state(state) { }
+		state(state)
+	{ }
 
 	// Gets a std::string for a nix::Symbol, checking if the Symbol is invalid first.
 	OptString symbolStr(nix::Symbol &symbol);
@@ -130,8 +133,11 @@ struct Printer
 	// Currently only applies to lambdas, primops, and applications of primops.
 	OptString valueName(nix::Value &expr);
 
-	void printValue(nix::Value &value, std::ostream &out, uint32_t indentLevel);
+	void printValue(nix::Value &value, std::ostream &out, uint32_t indentLevel, uint32_t depth);
+	void printRepeatedAttrs(nix::Bindings *attrs, std::ostream &out);
 
+	/** Attempt to force a value, returning a string for the kind of error if any. */
+	OptString safeForce(nix::Value &value, nix::PosIdx position = nix::noPos);
 };
 
 template <typename T>

@@ -10,7 +10,7 @@
 
 struct AttrKeyValueIter
 {
-	using iterator_category = std::input_iterator_tag;
+	using iterator_category = std::forward_iterator_tag;
 	using difference_type = ptrdiff_t;
 	using value_type = std::tuple<std::string const, nix::Value> const;
 	using pointer = std::tuple<std::string const, nix::Value *> const;
@@ -18,9 +18,11 @@ struct AttrKeyValueIter
 
 	// Pointer means we have to define operator= ourself.
 	nix::Attr *current;
-	nix::SymbolTable &symbols;
+	nix::SymbolTable *symbols;
 
-	AttrKeyValueIter(nix::Attr *current, nix::SymbolTable &symbols) :
+    AttrKeyValueIter() = default;
+
+	AttrKeyValueIter(nix::Attr *current, nix::SymbolTable *symbols) :
 		current(current),
 		symbols(symbols)
 	{ }
@@ -50,7 +52,7 @@ struct AttrKeyValueIter
 };
 
 // It cannot be a true std::forward_iterator as those require default constructors.
-static_assert(std::input_iterator<AttrKeyValueIter>);
+static_assert(std::forward_iterator<AttrKeyValueIter>);
 
 // The thing you construct for a range-based foor loop over `AttrKeyValueIter`s.
 struct AttrIterable
@@ -70,7 +72,7 @@ struct AttrIterable
 
 	AttrKeyValueIter end() const;
 
-	size_t size() const noexcept;
+	size_t size() const;
 
-	bool empty() const noexcept;
+	bool empty() const;
 };

@@ -25,7 +25,6 @@ stdenv.mkDerivation (self: {
 
   buildInputs = [
     boost
-    # For cppitertools
     catch2
   ];
 

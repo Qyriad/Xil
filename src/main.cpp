@@ -20,6 +20,7 @@
 #include <value-to-xml.hh>
 #include <print.hh>
 #include <eval-settings.hh>
+#include <globals.hh>
 
 #include <fmt/core.h>
 #include <fmt/format.h>
@@ -429,29 +430,30 @@ int main(int argc, char *argv[])
 	nix::initGC();
 
 	nix::EvalSettings &settings = nix::evalSettings;
-	auto success = settings.set("allow-import-from-derivation", "false");
-	assert(success);
+	assert(settings.set("allow-import-from-derivation", "false"));
 
 	// Then get a reference to the Store.
 	auto store = nix::openStore();
 
 	// FIXME: allow specifying SearchPath from command line.
-	//nix::EvalState state(nix::SearchPath{}, store, store);
 	auto state = std::make_shared<nix::EvalState>(nix::SearchPath{}, store, store);
 
 	auto exprStr = arguments.at(1);
 
 	nix::Expr *fileExpr = state->parseExprFromString(exprStr, state->rootPath(nix::CanonPath::fromCwd()));
 	nix::Value rootVal;
-	state->eval(fileExpr, rootVal);
-
-	Seen seenSet;
+	try {
+		state->eval(fileExpr, rootVal);
+	} catch (nix::EvalError &e) {
+		eprintln("{}", e.msg());
+		return 1;
+	}
 
 	Printer printer(state);
 
 	try {
 		//printValue(rootVal, state, std::cout, seenSet);
-		printer.printValue(rootVal, std::cout, 0);
+		printer.printValue(rootVal, std::cout, 0, 0);
 	} catch (nix::Interrupted &ex) {
 		eprintln("Interrupted: {}", ex.msg());
 	}
