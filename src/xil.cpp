@@ -280,6 +280,53 @@ std::string prettyString(std::string_view nixString, uint32_t indentLevel)
 	return fmt::to_string(buffer);
 }
 
+void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t indentLevel, uint32_t depth)
+{
+	auto attrIter = AttrIterable(attrs, this->state->symbols);
+
+	// FIXME: better heuristics for short attrsets.
+	if (attrIter.empty()) {
+		out << "{ }";
+		return;
+	}
+
+	if (!this->seen.insert(attrs).second) {
+		out << "«repeated";
+		this->printRepeatedAttrs(attrs, out);
+		out << "»";
+		return;
+	}
+
+	// FIXME: hardcodes pkgs recursion.
+	auto typeIsPkgs = std::find_if(
+		attrIter.begin(),
+		attrIter.end(),
+		[](std::tuple<std::string_view const, nix::Value const &> pair) -> bool {
+			auto const &[name, value] = pair;
+			return name == "_type" &&
+				value.type() == nix::nString &&
+				std::string_view{value.string.s} == "pkgs"s;
+		}
+	);
+
+	bool isPkgs = typeIsPkgs != attrIter.end();
+	if (isPkgs && indentLevel > 0) {
+		out << "«too deep»";
+		return;
+	}
+
+	out << "{";
+
+	for (auto const &[name, value] : attrIter) {
+		out << "\n" << Indent(indentLevel + 1) << name << " = ";
+		std::flush(out);
+		this->currentAttrName = name;
+		this->printValue(value, out, indentLevel + 1, depth + 1);
+		out << ";";
+	}
+
+	out << "\n" << Indent(indentLevel) << "}";
+}
 
 void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLevel, uint32_t depth)
 {
@@ -325,7 +372,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			out << "null";
 			break;
 		case nix::nAttrs: {
-			if (this->state->isDerivation(value)) {
+			if (this->state->isDerivation(value) && this->shortDerivations) {
 				auto drvPath = this->getAttrValue(value.attrs, this->state->sDrvPath);
 				out << "«derivation ";
 				// We handle drvPath specially because anything other than a string
@@ -353,51 +400,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 				break;
 			}
 
-			auto attrIter = AttrIterable(value.attrs, this->state->symbols);
-
-			// FIXME: better heuristics for short attrsets.
-			if (attrIter.empty()) {
-				out << "{ }";
-				return;
-			}
-
-			if (!this->seen.insert(value.attrs).second) {
-				out << "«repeated";
-				if (value.type() == nix::nAttrs) {
-					this->printRepeatedAttrs(value.attrs, out);
-				}
-				out << "»";
-				return;
-			}
-
-			// FIXME: hardcodes pkgs recursion.
-			auto typeIsPkgs = std::find_if(
-				attrIter.begin(),
-				attrIter.end(),
-				[](std::tuple<std::string_view const, nix::Value const &> pair) -> bool {
-					auto const &[name, value] = pair;
-					return name == "_type" &&
-						value.type() == nix::nString &&
-						std::string_view{value.string.s} == "pkgs"s;
-				}
-			);
-			bool isPkgs = typeIsPkgs != attrIter.end();
-			if (isPkgs && indentLevel > 0) {
-				out << "«too deep»";
-				return;
-			}
-
-			out << "{";
-
-			for (auto const &[name, value] : attrIter) {
-				out << "\n" << Indent(indentLevel + 1) << name << " = ";
-				std::flush(out);
-				this->currentAttrName = name;
-				this->printValue(value, out, indentLevel + 1, depth + 1);
-				out << ";";
-			}
-
-			out << "\n" << Indent(indentLevel) << "}";
+			this->printAttrs(value.attrs, out, indentLevel, depth);
 
 			break;
 		}

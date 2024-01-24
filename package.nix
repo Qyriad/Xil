@@ -29,7 +29,7 @@ stdenv.mkDerivation (self: {
   ];
 
   # Workaround https://github.com/NixOS/nixpkgs/issues/19098.
-  NIX_CFLAGS_LINK = lib.optionalString stdenv.isDarwin "-fuse-ld=lld";
+  env.NIX_CFLAGS_LINK = lib.optionalString stdenv.isDarwin "-fuse-ld=lld";
 
   nativeBuildInputs = [
     meson

@@ -27,6 +27,10 @@ foreach dep_name : dep_names
   deps += dependency(dep_name, include_type : 'system')
 endforeach
 
+conf_data = configuration_data()
+conf_data.set('callpackage_fun', get_option('callpackage_fun'))
+configure_file(input : 'src/settings.hpp.in', output : 'settings.hpp', configuration : conf_data)
+
 srcs = [
   'src/main.cpp',
   'src/xil.cpp',

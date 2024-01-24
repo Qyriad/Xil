@@ -1,18 +1,24 @@
 // Boilerplate header!
 
+#include <concepts>
 #include <functional>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 
 // Nix headers.
 #include <config.h>
 #include <shared.hh>
 #include <eval.hh>
 
-#include <boost/core/demangle.hpp>
 #include <fmt/core.h>
+#include <fmt/ostream.h>
+#include <boost/core/demangle.hpp>
+#include <argparse/argparse.hpp>
+
+#include "settings.hpp"
 
 namespace nix
 {
@@ -33,6 +39,9 @@ void eprintln(fmt::format_string<T ...> fmt, T && ...args)
 	fmt::vprint(stderr, fmt, fmt::make_format_args(args ...));
 	eprint("\n");
 }
+
+template <>
+struct fmt::formatter<argparse::ArgumentParser> : fmt::ostream_formatter { };
 
 
 using OptString = std::optional<std::string>;
@@ -95,6 +104,17 @@ struct overloaded : Ts... { using Ts::operator()...; };
 template<typename... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
+/** Version of nix::ExprState::eval that returns its nix::Value instead of taking an out parameter.
+ * Can be called on lvalue or rvalue references.
+ */
+template <typename ExprT> requires(std::convertible_to<ExprT &&, nix::Expr>)
+nix::Value nixEval(nix::EvalState &state, ExprT &&expr)
+{
+	nix::Value out;
+	state.eval(&expr, out);
+	return out;
+}
+
 // Has a fmt::format_as, and an operator<<.
 struct Indent
 {
@@ -117,8 +137,11 @@ struct Printer
 	/** Print errors without their traces in attrsets and lists. */
 	bool shortErrors;
 
-	explicit Printer(std::shared_ptr<nix::EvalState> state, bool safe, bool shortErrors) :
-		state(state), safe(safe), shortErrors(shortErrors)
+	/** Print derivations as their drvPaths. */
+	bool shortDerivations;
+
+	explicit Printer(std::shared_ptr<nix::EvalState> state, bool safe, bool shortErrors, bool shortDerivations) :
+		state(state), safe(safe), shortErrors(shortErrors), shortDerivations(shortDerivations)
 	{ }
 
 	// Gets a std::string for a nix::Symbol, checking if the Symbol is invalid first.
@@ -143,6 +166,8 @@ struct Printer
 	OptString valueName(nix::Value &expr);
 
 	void printValue(nix::Value &value, std::ostream &out, uint32_t indentLevel, uint32_t depth);
+
+	void printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t indentLevel, uint32_t depth);
 	void printRepeatedAttrs(nix::Bindings *attrs, std::ostream &out);
 
 	/** Attempt to force a value, returning a string for the kind of error if any. */
