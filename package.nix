@@ -8,6 +8,7 @@
   fmt,
   nix,
   boost,
+  argparse,
   cppitertools,
   clang,
   lld,
@@ -42,6 +43,7 @@ stdenv.mkDerivation (self: {
     (nix.overrideAttrs { separateDebugInfo = true; })
     boost
     cppitertools
+    argparse
     cmake
   ];
 

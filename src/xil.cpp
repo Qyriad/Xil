@@ -492,28 +492,48 @@ void Printer::printRepeatedAttrs(nix::Bindings *attrs, std::ostream &out)
 
 OptString Printer::safeForce(nix::Value &value, nix::PosIdx position)
 {
+	if (!this->safe) {
+		this->state->forceValue(value, position);
+		return std::nullopt;
+	}
 	try {
 		this->state->forceValue(value, position);
 	} catch (nix::ThrownError &ex) {
 		auto msg = ex.msg();
+		if (!this->shortErrors) {
+			return msg;
+		}
+
 		auto throwLine = stringErrorLine(msg);
 		if (throwLine.has_value()) {
 			return fmt::format("throws: {}", throwLine.value());
 		}
 		return "throws";
 	} catch (nix::AssertionError &ex) {
+		if (!this->shortErrors) {
+			return ex.msg();
+		}
+
 		auto errorLine = stringErrorLine(ex.msg());
 		if (errorLine.has_value()) {
 			return fmt::format("assertion error: {}", errorLine.value());
 		}
 		return "assertion error";
 	} catch (nix::EvalError &ex) {
+		if (!this->shortErrors) {
+			return ex.msg();
+		}
+
 		auto errorLine = stringErrorLine(ex.msg());
 		if (errorLine.has_value()) {
 			return fmt::format("eval error: {}", errorLine.value());
 		}
 		return "throws";
 	} catch (nix::Error &ex) {
+		if (!this->shortErrors) {
+			return ex.msg();
+		}
+
 		if (ex.msg().find("allow-import-from-derivation")) {
 			return "IFD error";
 		}

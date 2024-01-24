@@ -13,7 +13,7 @@ project(
 
 dep_names = [
   'fmt',
-  'boost',
+  'argparse',
   'cppitertools',
   'nix-cmd',
   'nix-expr',

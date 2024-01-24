@@ -111,8 +111,14 @@ struct Printer
 	/** Used by function printing to be Smart™. */
 	OptString currentAttrName = std::nullopt;
 
-	explicit Printer(std::shared_ptr<nix::EvalState> state) :
-		state(state)
+	/** Catch errors during evaluation instead of aborting. */
+	bool safe;
+
+	/** Print errors without their traces in attrsets and lists. */
+	bool shortErrors;
+
+	explicit Printer(std::shared_ptr<nix::EvalState> state, bool safe, bool shortErrors) :
+		state(state), safe(safe), shortErrors(shortErrors)
 	{ }
 
 	// Gets a std::string for a nix::Symbol, checking if the Symbol is invalid first.
