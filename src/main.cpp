@@ -125,7 +125,7 @@ int main(int argc, char *argv[])
 		auto const safe = evalParser.get<bool>("--safe") || parser.is_subcommand_used(printCmd);
 		auto const shortErrors = evalParser.get<bool>("--short-errors") || parser.is_subcommand_used(printCmd);
 		auto shortDrvsOpt = evalParser.get<std::string>("--short-derivations");
-		bool shortDrvs = (shortDrvsOpt == "always") || (shortDrvsOpt == "auto");
+		bool shortDrvs = shortDrvsOpt == "always";
 
 		nix::Expr *expr = nullptr;
 
