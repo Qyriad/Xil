@@ -1,0 +1,4 @@
+option('callpackage_fun', type : 'string',
+	value : 'target: (import <nixpkgs> { }).callPackage target { }',
+	description : 'The Nix expression to use for --call-package'
+)

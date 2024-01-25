@@ -21,9 +21,11 @@ stdenv.mkDerivation (self: {
 
   src = lib.sourceFilesBySuffices ./. [
     "meson.build"
+    "meson.options"
     ".cpp"
     ".hpp"
     ".nix"
+    ".in"
     ".py"
     ".md"
   ];
