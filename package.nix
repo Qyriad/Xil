@@ -66,7 +66,20 @@ stdenv.mkDerivation (self: {
 
     /** Override the default configuration for Xil. */
     withConfig = let
-      removeNewlines = lib.replaceStrings [ "\n" ] [ "" ];
+      splitNewline = lib.splitString "\n";
+      splitSpace = lib.splitString " ";
+      removeEmpty = lib.filter (item: lib.stringLength item != 0);
+      rejoin = lib.concatStringsSep " ";
+
+      # Very silly function that puts a nix expression all on one line and trims spaces around it.
+      # (lib.strings.strip when)
+      trimString = string: lib.pipe string [
+        splitNewline
+        rejoin
+        splitSpace
+        removeEmpty
+        rejoin
+      ];
 
       default.callPackageString = ''
         target: let
@@ -84,7 +97,7 @@ stdenv.mkDerivation (self: {
         # with spaces >.>
         preConfigure = (prev.preConfigure or "") + ''
           mesonFlagsArray+=(
-            "-Dcallpackage_fun=${removeNewlines callPackageString}"
+            "-Dcallpackage_fun=${trimString callPackageString}"
           )
         '';
       });
