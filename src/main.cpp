@@ -186,6 +186,27 @@ struct XilArgs
 
 		return std::nullopt;
 	}
+
+	/** Gets the nix::Expr from whichever of --expr, --file, and --flake was used. */
+	nix::Expr *getTargetExpr(ArgumentParser const &evalParser, nix::EvalState &state) const
+	{
+		nix::Expr *expr;
+
+		if (auto const &exprStr = evalParser.present("--expr")) {
+			std::string const &str = exprStr.value();
+			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
+		} else if (auto const &exprFile = evalParser.present("--file")) {
+			auto const &file = nix::SourcePath(nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd()));
+			expr = state.parseExprFromFile(file);
+		} else if (auto const &exprFlake = evalParser.present("--flake")) {
+			eprintln("flakes not yet implemented");
+			abort();
+		} else {
+			assert("unreachable" == nullptr);
+		}
+
+		return expr;
+	}
 };
 
 int main(int argc, char *argv[])

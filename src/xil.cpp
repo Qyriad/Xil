@@ -447,7 +447,20 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 					}
 					if (value.lambda.fun->hasFormals()) {
 						// FIXME: print formals
-						out << "{ … }: ";
+						out << "{ ";
+						auto formalToString = [&](nix::Formal &formal) {
+							auto str = this->symbolStr(formal.name);
+							if (str.has_value()) {
+								return str.value();
+							}
+							return "«no name?»"s;
+						};
+						auto formalsNames = iter::imap(formalToString, value.lambda.fun->formals->formals);
+						out << fmt::format("{}", fmt::join(formalsNames, ", "));
+						if (value.lambda.fun->formals->ellipsis) {
+							out << ", ...";
+						}
+						out << " }: ";
 					}
 				}
 				out << "…»";
