@@ -129,6 +129,17 @@ nix::Value nixEval(nix::EvalState &state, ExprT &&expr)
 	return out;
 }
 
+/** Version of nix::ExprState::callFunction that returns its nix::Value instead of taking an outparameter.
+ * Can be called on lvalue or rvalue references.
+ */
+template <typename ValueT> requires(std::convertible_to<ValueT &&, nix::Value>)
+nix::Value nixCallFunction(nix::EvalState &state, ValueT &&fun, ValueT &&callOn, nix::PosIdx pos = nix::noPos)
+{
+	nix::Value out;
+	state.callFunction(fun, callOn, out, pos);
+	return out;
+}
+
 // Has a fmt::format_as, and an operator<<.
 struct Indent
 {
