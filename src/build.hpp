@@ -137,7 +137,7 @@ struct DerivationMeta
 				.drvPath = nix::makeConstantStorePathRef(this->drvPath),
 				.outputs = nix::OutputsSpec::Names{outName},
 			};
-			this->outputs.emplace_back(outName, outPath.value(), derivedPath);
+			this->outputs.push_back(DerivationOutput{outName, outPath.value(), derivedPath});
 		}
 	}
 

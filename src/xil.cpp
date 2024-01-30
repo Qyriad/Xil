@@ -225,7 +225,7 @@ std::string prettyString(std::string_view nixString, uint32_t indentLevel)
 	for (auto &&ch : nixString) {
 		if (needsIndent) {
 			// + 1 because things indented in the string need to be indented *further* than the string.
-			fmt::format_to(std::back_inserter(buffer), "{}", Indent(indentLevel + 1));
+			fmt::format_to(std::back_inserter(buffer), "{}", Indent{indentLevel + 1});
 			needsIndent = false;
 		}
 
@@ -268,7 +268,7 @@ std::string prettyString(std::string_view nixString, uint32_t indentLevel)
 
 	if (needsIndent) {
 		// No more + 1 for the last part, since this is the closing part of the string.
-		fmt::format_to(std::back_inserter(buffer), "{}", Indent(indentLevel));
+		fmt::format_to(std::back_inserter(buffer), "{}", Indent{indentLevel});
 	}
 
 	if (multiline) {
@@ -318,14 +318,14 @@ void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t inden
 	out << "{";
 
 	for (auto const &[name, value] : attrIter) {
-		out << "\n" << Indent(indentLevel + 1) << name << " = ";
+		out << "\n" << Indent{indentLevel + 1} << name << " = ";
 		std::flush(out);
 		this->currentAttrName = name;
 		this->printValue(value, out, indentLevel + 1, depth + 1);
 		out << ";";
 	}
 
-	out << "\n" << Indent(indentLevel) << "}";
+	out << "\n" << Indent{indentLevel} << "}";
 }
 
 void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLevel, uint32_t depth)
@@ -414,12 +414,12 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 
 			out << "[";
 			for (auto &listItem : value.listItems()) {
-				out << "\n" << Indent(indentLevel + 1);
+				out << "\n" << Indent{indentLevel + 1};
 				std::flush(out);
 				this->printValue(*listItem, out, indentLevel + 1, depth + 1);
 			}
 
-			out << "\n" << Indent(indentLevel) << "]";
+			out << "\n" << Indent{indentLevel} << "]";
 
 			break;
 		}
