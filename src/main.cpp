@@ -165,6 +165,7 @@ struct XilArgs
 		this->parser.parse_args(argc, argv);
 	}
 
+	/** Gets the XilArgs, if any, for `eval` or `print`, whichever is used. */
 	std::optional<XilEvalArgs> getEvalArgs() noexcept
 	{
 		if (this->parser.is_subcommand_used(this->evalCmd)) {
@@ -185,39 +186,6 @@ struct XilArgs
 
 		return std::nullopt;
 	}
-
-	bool safe(ArgumentParser const &evalParser) const noexcept
-	{
-		// `xil print` defaults to --safe.
-		return evalParser.get<bool>("--safe") || this->parser.is_subcommand_used(this->printCmd);
-	}
-
-	bool shortErrors(ArgumentParser const &evalParser) const noexcept
-	{
-		// `xil print` defaults to --short-errors.
-		return evalParser.get<bool>("--short-errors") || this->parser.is_subcommand_used(this->printCmd);
-	}
-
-	/** Gets the nix::Expr from whichever of --expr, --file, and --flake was used. */
-	nix::Expr *getTargetExpr(ArgumentParser const &evalParser, nix::EvalState &state) const
-	{
-		nix::Expr *expr;
-
-		if (auto const &exprStr = evalParser.present("--expr")) {
-			std::string const &str = exprStr.value();
-			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
-		} else if (auto const &exprFile = evalParser.present("--file")) {
-			auto const &file = nix::SourcePath(nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd()));
-			expr = state.parseExprFromFile(file);
-		} else if (auto const &exprFlake = evalParser.present("--flake")) {
-			eprintln("flakes not yet implemented");
-			abort();
-		} else {
-			assert("unreachable" == nullptr);
-		}
-
-		return expr;
-	}
 };
 
 int main(int argc, char *argv[])
@@ -230,7 +198,7 @@ int main(int argc, char *argv[])
 	nix::EvalSettings &settings = nix::evalSettings;
 	assert(settings.set("allow-import-from-derivation", "false"));
 
-	// Then get a reference to the Store. FIXME: --store option
+	// FIXME: --store option
 	auto store = nix::openStore();
 
 	// FIXME: allow specifying SearchPath from command line.
