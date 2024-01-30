@@ -3,8 +3,14 @@
 # Hacky script to run clang -fsyntax-only on source files using compile_commands.json.
 
 import json
+import os
 import shlex
 import subprocess
+
+# This script is meant to be run from the build directory.
+# For convenience, cd to that if we need to.
+if os.path.dirname(os.getcwd()) != 'build':
+    os.chdir('build')
 
 commands_json = json.load(open('compile_commands.json', 'r'))
 commands = []
