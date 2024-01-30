@@ -64,6 +64,31 @@ stdenv.mkDerivation (self: {
     withoutCheck = self.overrideAttrs { doCheck = false; };
     checkOnly = self.overrideAttrs { dontBuild = true; };
 
+    /** Override the default configuration for Xil. */
+    withConfig = let
+      removeNewlines = lib.replaceStrings [ "\n" ] [ "" ];
+
+      default.callPackageString = ''
+        target: let
+          nixpkgs = builtins.getFlake "nixpkgs";
+          pkgs = import nixpkgs { };
+        in
+          pkgs.callPackage target { }
+      '';
+
+    in {
+      callPackageString ? default.callPackageString,
+    }:
+      self.overrideAttrs (prev: {
+        # We have to use preConfigure instead of `mesonFlags` directly, because `mesonFlags` can't have args
+        # with spaces >.>
+        preConfigure = (prev.preConfigure or "") + ''
+          mesonFlagsArray+=(
+            "-Dcallpackage_fun=${removeNewlines callPackageString}"
+          )
+        '';
+      });
+
     mkShell = {
       mkShell,
       clang-tools,
