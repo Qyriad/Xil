@@ -67,6 +67,7 @@ stdenv.mkDerivation (self: {
     /** Override the default configuration for Xil. */
     withConfig = let
       splitNewline = lib.splitString "\n";
+      replaceTabs = lib.replaceStrings [ "\t" ] [ " " ];
       splitSpace = lib.splitString " ";
       removeEmpty = lib.filter (item: lib.stringLength item != 0);
       rejoin = lib.concatStringsSep " ";
@@ -78,6 +79,7 @@ stdenv.mkDerivation (self: {
       trimAndEscape = string: lib.pipe string [
         splitNewline
         rejoin
+        replaceTabs
         splitSpace
         removeEmpty
         rejoin
