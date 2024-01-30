@@ -35,6 +35,7 @@ srcs = [
   'src/main.cpp',
   'src/xil.cpp',
   'src/attriter.cpp',
+  'src/build.cpp',
 ]
 
 executable('xil', srcs, dependencies : deps, install : true)

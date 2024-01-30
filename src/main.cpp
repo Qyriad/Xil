@@ -28,12 +28,33 @@
 #include <argparse/argparse.hpp>
 
 #include "xil.hpp"
+#include "build.hpp"
 
 using fmt::print, fmt::println;
 using argparse::ArgumentParser;
 
+nix::Expr *getTargetExpr(ArgumentParser const &parser, nix::EvalState &state)
+{
+	nix::Expr *expr;
+
+	if (auto exprStr = parser.present("--expr")) {
+		auto str = exprStr.value();
+		expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
+	} else if (auto exprFile = parser.present("file")) {
+		auto file = nix::SourcePath(nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd()));
+		expr = state.parseExprFromFile(file);
+	} else if (auto exprFlake = parser.present("flake")) {
+		eprintln("flakes not yet implemented");
+		abort();
+	} else {
+		assert("unreachable" == nullptr);
+	}
+
+	return expr;
+}
+
 // FIXME: refactor
-void addExprArguments(ArgumentParser &parser, bool isPrint)
+void addEvalArguments(ArgumentParser &parser, bool isPrint)
 {
 	// FIXME: make invertable
 	parser.add_argument("--safe")
@@ -53,10 +74,10 @@ void addExprArguments(ArgumentParser &parser, bool isPrint)
 		.default_value(isPrint ? "auto" : "never")
 		.nargs(1)
 		.help("Print derivations as their drvPaths instead of as attrsets, or only at top-level for auto");
-	parser.add_argument("--call-package", "-C")
-		.flag()
-		.help(fmt::format("Use `{}` to call the target expression", CALLPACKAGE_FUN));
+}
 
+void addExprArguments(ArgumentParser &parser)
+{
 	auto &group = parser.add_mutually_exclusive_group(/* required = */ true);
 
 	group.add_argument("--expr", "-E")
@@ -71,6 +92,10 @@ void addExprArguments(ArgumentParser &parser, bool isPrint)
 		.nargs(1)
 		.metavar("FLAKEREF")
 		.help("Evaluate a flake (unimplemented)");
+
+	parser.add_argument("--call-package", "-C")
+		.flag()
+		.help(fmt::format("Use `{}` to call the target expression", CALLPACKAGE_FUN));
 }
 
 int main(int argc, char *argv[])
@@ -84,12 +109,19 @@ int main(int argc, char *argv[])
 	evalCmd.add_description("Evaluate an Nix expression and print what it evaluates to");
 	// Takes eval_command by reference.
 	parser.add_subparser(evalCmd);
-	addExprArguments(evalCmd, false);
+	addExprArguments(evalCmd);
+	addEvalArguments(evalCmd, false);
 
 	ArgumentParser printCmd("print");
 	printCmd.add_description("Alias for eval --safe --short-errors --short-derivations=auto");
 	parser.add_subparser(printCmd);
-	addExprArguments(printCmd, true);
+	addExprArguments(printCmd);
+	addEvalArguments(printCmd, true);
+
+	ArgumentParser buildCmd("build");
+	buildCmd.add_description("Build the derivation evaluated from a Nix expression");
+	parser.add_subparser(buildCmd);
+	addExprArguments(buildCmd);
 
 	try {
 		parser.parse_args(argc, argv);
@@ -104,7 +136,7 @@ int main(int argc, char *argv[])
 	nix::EvalSettings &settings = nix::evalSettings;
 	assert(settings.set("allow-import-from-derivation", "false"));
 
-	// Then get a reference to the Store.
+	// Then get a reference to the Store. FIXME: --store option
 	auto store = nix::openStore();
 
 	// FIXME: allow specifying SearchPath from command line.
@@ -127,20 +159,7 @@ int main(int argc, char *argv[])
 		auto shortDrvsOpt = evalParser.get<std::string>("--short-derivations");
 		bool shortDrvs = (shortDrvsOpt == "always") || (shortDrvsOpt == "auto");
 
-		nix::Expr *expr = nullptr;
-
-		if (auto exprStr = evalParser.present("--expr")) {
-			auto str = exprStr.value();
-			expr = state->parseExprFromString(str, state->rootPath(nix::CanonPath::fromCwd()));
-		} else if (auto exprFile = evalParser.present("file")) {
-			auto file = nix::SourcePath(nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd()));
-			expr = state->parseExprFromFile(file);
-		} else if (auto exprFlake = evalParser.present("flake")) {
-			eprintln("flakes not yet implemented");
-			return 2;
-		} else {
-			assert("unreachable" == nullptr);
-		}
+		nix::Expr *expr = getTargetExpr(evalParser, *state);
 
 		nix::Value rootVal;
 		try {
@@ -175,6 +194,34 @@ int main(int argc, char *argv[])
 			return 3;
 		}
 		print("\n");
+	} else if (parser.is_subcommand_used("build")) {
+		nix::Expr *expr = getTargetExpr(buildCmd, *state);
+		nix::Value rootVal;
+		try {
+			state->eval(expr, rootVal);
+
+			// Use the user specified way of "call package".
+			auto rootPath = state->rootPath(nix::CanonPath::fromCwd());
+			auto *callPackageExpr = state->parseExprFromString(CALLPACKAGE_FUN, rootPath);
+			auto callPackage = nixEval(*state, *callPackageExpr);
+			nix::Value callPackageResult;
+			state->callFunction(callPackage, rootVal, callPackageResult, nix::noPos);
+			rootVal = callPackageResult;
+			assert(state->isDerivation(rootVal));
+
+			DrvBuilder builder(state, store, rootVal);
+			builder.realizeDerivations();
+			//builder.buildPath(builder.pathsToRealize);
+			//nix::DerivedPath::Built path {
+			//	.drvPath =
+			//};
+
+		} catch (nix::Interrupted &ex) {
+			eprintln("Interrupted: {}", ex.msg());
+		} catch (nix::EvalError &ex) {
+			eprintln("{}", ex.msg());
+			return 3;
+		}
 	}
 
 	return 0;

@@ -1,5 +1,7 @@
 // Boilerplate header!
 
+#pragma once
+
 #include <concepts>
 #include <functional>
 #include <iostream>
@@ -43,6 +45,18 @@ void eprintln(fmt::format_string<T ...> fmt, T && ...args)
 template <>
 struct fmt::formatter<argparse::ArgumentParser> : fmt::ostream_formatter { };
 
+template <typename T>
+concept ArithmeticT = std::is_arithmetic<T>::value;
+
+/** Naïvely pluralize an english noun if the specified number is not 1. Otherwise return the as-is. */
+template <ArithmeticT T>
+std::string maybePluralize(T numberOfThings, std::string_view baseNoun, std::string_view suffix = "s")
+{
+	if (numberOfThings == 1) {
+		return std::string(baseNoun);
+	}
+	return fmt::format("{}{}", baseNoun, suffix);
+}
 
 using OptString = std::optional<std::string>;
 using OptStringView = std::optional<std::string_view>;
