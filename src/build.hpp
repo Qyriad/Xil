@@ -1,30 +1,41 @@
 #pragma once
 
-#include <span>
+#include <cassert>
+#include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <type_traits>
 
 // Nix headers.
-#include <build-result.hh>
-#include <nix/config.h>
-#include <nix/derivations.hh>
+#include <nix/config.h> // IWYU pragma: keep
+// nix::Bindings
+#include <nix/attr-set.hh>
+// nix::{DerivedPath, makeConstantStorePathRef}
 #include <nix/derived-path.hh>
+// nix::EvalState
 #include <nix/eval.hh>
+// nix::{Verbosity, ErrorInfo}
 #include <nix/error.hh>
+// nix::DrvInfo
 #include <nix/get-drvs.hh>
+// nix::noPos
+#include <nix/nixexpr.hh>
+// nix::OutputsSpec
+#include <nix/outputs-spec.hh>
+// nix::StorePath
+#include <nix/path.hh>
+// nix::ref
+#include <nix/ref.hh>
+// nix::Store
 #include <nix/store-api.hh>
+// nix::Value
 #include <nix/value.hh>
-#include <nix/build/worker.hh>
+// nix::{Logger, ActivityId, ActivityType, ResultType, Fields}
 #include <nix/logging.hh>
 
-#include <cppitertools/itertools.hpp>
-#include <boost/algorithm/string.hpp>
 #include <fmt/core.h>
-#include <fmt/compile.h>
-
-#include "xil.hpp"
+#include <fmt/format.h>
 
 using namespace std::literals::string_literals;
 

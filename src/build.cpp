@@ -1,5 +1,16 @@
 #include "build.hpp"
 
+#include <cstdint>
+#include <sstream>
+
+#include "xil.hpp"
+
+// nix::Derivation
+#include <nix/derivations.hh>
+
+#include <boost/algorithm/string.hpp>
+#include <cppitertools/itertools.hpp>
+
 std::string_view nix::format_as(nix::StorePath const path) noexcept
 {
 	return path.to_string();
