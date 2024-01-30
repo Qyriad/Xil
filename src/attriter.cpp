@@ -2,16 +2,20 @@
 
 AttrKeyValueIter::reference AttrKeyValueIter::operator*() const
 {
-	std::string const &name = (*this->symbols)[this->current->name];
+	std::string const name = (*this->symbols)[this->current->name];
+	// We need a persistent reference, so keep this string alive in this class's vector.
+	this->referredNames.push_back(name);
 	nix::Value &value = *this->current->value;
-	return std::tie(name, value);
+	return std::tie(this->referredNames.back(), value);
 }
 
 AttrKeyValueIter::pointer AttrKeyValueIter::operator->()
 {
-	std::string const &name = (*this->symbols)[this->current->name];
+	std::string const name = (*this->symbols)[this->current->name];
+	// We need a persistent reference, so keep this string alive in this class's vector.
+	this->referredNames.push_back(name);
 	nix::Value *value = this->current->value;
-	return std::tie(name, value);
+	return std::tie(this->referredNames.back(), value);
 }
 
 AttrKeyValueIter &AttrKeyValueIter::operator++()

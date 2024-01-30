@@ -16,6 +16,9 @@ struct AttrKeyValueIter
 	using pointer = std::tuple<std::string const, nix::Value *> const;
 	using reference = std::tuple<std::string const &, nix::Value &> const;
 
+	// Cursed.
+	std::vector<std::string> mutable referredNames;
+
 	// Pointer means we have to define operator= ourself.
 	nix::Attr *current;
 	nix::SymbolTable *symbols;
