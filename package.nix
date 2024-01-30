@@ -63,6 +63,20 @@ stdenv.mkDerivation (self: {
   passthru = {
     withoutCheck = self.overrideAttrs { doCheck = false; };
     checkOnly = self.overrideAttrs { dontBuild = true; };
+
+    mkShell = {
+      mkShell,
+      clang-tools,
+      include-what-you-use,
+    }: mkShell {
+
+      packages = [
+        clang-tools
+        include-what-you-use
+      ];
+
+      inputsFrom = [ self ];
+    };
   };
 
   meta = {

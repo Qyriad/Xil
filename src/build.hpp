@@ -165,7 +165,6 @@ struct DrvBuilder
 		// We will restore the original logger in the destructor.
 		nix::logger = &this->ourLogger;
 
-		this->state->forceValue(drvValue, nix::noPos);
 		assert(this->state->isDerivation(drvValue));
 	}
 

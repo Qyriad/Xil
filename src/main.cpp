@@ -1,34 +1,35 @@
 // vim: tabstop=4 shiftwidth=4 noexpandtab
 
+#include <cassert>
+#include <cstdlib>
+#include <exception>
 #include <functional>
 #include <iostream>
+#include <memory>
+#include <optional>
 #include <string>
-#include <sstream>
-#include <stdexcept>
-#include <typeindex>
-#include <utility>
-#include <unordered_map>
+#include <vector>
 
 // Nix headers.
-#include <config.h>
-#include <shared.hh>
-#include <command.hh>
-#include <eval.hh>
-#include <store-api.hh>
-#include <input-accessor.hh>
-#include <canon-path.hh>
-#include <value-to-xml.hh>
-#include <print.hh>
-#include <eval-settings.hh>
-#include <globals.hh>
+#include <nix/config.h> // IWYU pragma: keep
+#include <nix/canon-path.hh>
+#include <nix/eval.hh>
+#include <nix/eval-settings.hh>
+#include <nix/input-accessor.hh>
+#include <nix/nixexpr.hh>
+#include <nix/path.hh>
+#include <nix/search-path.hh>
+#include <nix/shared.hh>
+#include <nix/store-api.hh>
+#include <nix/util.hh>
+#include <nix/value.hh>
 
 #include <fmt/core.h>
-#include <fmt/format.h>
-#include <boost/core/demangle.hpp>
 #include <argparse/argparse.hpp>
 
 #include "xil.hpp"
 #include "build.hpp"
+#include "settings.hpp"
 
 using fmt::print, fmt::println;
 using argparse::ArgumentParser;
@@ -207,14 +208,12 @@ int main(int argc, char *argv[])
 			nix::Value callPackageResult;
 			state->callFunction(callPackage, rootVal, callPackageResult, nix::noPos);
 			rootVal = callPackageResult;
+			state->forceValue(rootVal, nix::noPos);
 			assert(state->isDerivation(rootVal));
 
 			DrvBuilder builder(state, store, rootVal);
+			eprintln("Expression evaluated to derivation {}", builder.meta.drvPath);
 			builder.realizeDerivations();
-			//builder.buildPath(builder.pathsToRealize);
-			//nix::DerivedPath::Built path {
-			//	.drvPath =
-			//};
 
 		} catch (nix::Interrupted &ex) {
 			eprintln("Interrupted: {}", ex.msg());

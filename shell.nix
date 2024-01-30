@@ -7,7 +7,4 @@ let
     cppitertools = pkgs.callPackage ./cppitertools.nix { };
   };
 in
-  pkgs.mkShell {
-    packages = [ pkgs.clang-tools ];
-    inputsFrom = [ xil ];
-  }
+  pkgs.callPackage xil.mkShell { }

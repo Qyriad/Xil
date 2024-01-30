@@ -16,7 +16,7 @@
 
       in {
         packages.default = xil;
-        devShells.default = import ./shell.nix { inherit pkgs; };
+        devShells.default = pkgs.callPackage xil.mkShell { };
       }
 
     ) # eachDefaultSystem
