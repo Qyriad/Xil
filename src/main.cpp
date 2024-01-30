@@ -217,7 +217,8 @@ int main(int argc, char *argv[])
 	nix::initGC();
 
 	nix::EvalSettings &settings = nix::evalSettings;
-	assert(settings.set("allow-import-from-derivation", "false"));
+	// FIXME: log IFDs, rather than disallowing them.
+	//assert(settings.set("allow-import-from-derivation", "false"));
 
 	// FIXME: --store option
 	auto store = nix::openStore();
@@ -273,8 +274,10 @@ int main(int argc, char *argv[])
 		try {
 			state->eval(expr, rootVal);
 
+			if (args.buildCmd.get<bool>("--call-package")) {
+				rootVal = callPackage(*state, rootVal);
+			}
 			// Use the user specified way of "call package".
-			rootVal = callPackage(*state, rootVal);
 			state->forceValue(rootVal, nix::noPos);
 			assert(state->isDerivation(rootVal));
 
