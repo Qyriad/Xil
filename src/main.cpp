@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
 	nix::initNix();
 	nix::initGC();
 
-	nix::EvalSettings &settings = nix::evalSettings;
+	//nix::EvalSettings &settings = nix::evalSettings;
 	// FIXME: log IFDs, rather than disallowing them.
 	//assert(settings.set("allow-import-from-derivation", "false"));
 
