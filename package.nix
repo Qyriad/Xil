@@ -70,23 +70,26 @@ stdenv.mkDerivation (self: {
       splitSpace = lib.splitString " ";
       removeEmpty = lib.filter (item: lib.stringLength item != 0);
       rejoin = lib.concatStringsSep " ";
+      escapeQuotesForC = lib.strings.escapeC [ "\"" ];
 
-      # Very silly function that puts a nix expression all on one line and trims spaces around it.
+      # Very silly function that puts a nix expression all on one line and trims spaces around it,
+      # and then escapes quotes for C.
       # (lib.strings.strip when)
-      trimString = string: lib.pipe string [
+      trimAndEscape = string: lib.pipe string [
         splitNewline
         rejoin
         splitSpace
         removeEmpty
         rejoin
+        escapeQuotesForC
       ];
 
       default.callPackageString = ''
-        target: let
+        let
           nixpkgs = builtins.getFlake "nixpkgs";
           pkgs = import nixpkgs { };
         in
-          pkgs.callPackage target { }
+          target: pkgs.callPackage target { }
       '';
 
     in {
@@ -97,7 +100,7 @@ stdenv.mkDerivation (self: {
         # with spaces >.>
         preConfigure = (prev.preConfigure or "") + ''
           mesonFlagsArray+=(
-            "-Dcallpackage_fun=${trimString callPackageString}"
+            "-Dcallpackage_fun=${trimAndEscape callPackageString}"
           )
         '';
       });
