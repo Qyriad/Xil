@@ -142,6 +142,7 @@ struct DerivationMeta
 	}
 
 	std::vector<std::reference_wrapper<nix::StorePath>> outPaths();
+	std::vector<std::string> fullOutPaths(nix::Store const &store);
 
 	std::vector<nix::DerivedPath> derivedPaths();
 };

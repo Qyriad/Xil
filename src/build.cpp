@@ -2,14 +2,21 @@
 
 #include <cstdint>
 #include <sstream>
+#include <filesystem>
 
 #include "xil.hpp"
 
+// nix::KeyedBuildResult
+#include <nix/build-result.hh>
 // nix::Derivation
 #include <nix/derivations.hh>
+// nix::Realisation
+#include <nix/realisation.hh>
 
 #include <boost/algorithm/string.hpp>
 #include <cppitertools/itertools.hpp>
+
+namespace stdfs = std::filesystem;
 
 std::string_view nix::format_as(nix::StorePath const path) noexcept
 {
@@ -143,6 +150,15 @@ std::vector<std::reference_wrapper<nix::StorePath>> DerivationMeta::outPaths()
 	return res;
 }
 
+std::vector<std::string> DerivationMeta::fullOutPaths(nix::Store const &store)
+{
+	std::vector<std::string> res;
+	for (auto const &derivationOutput : this->outputs) {
+		res.push_back(store.printStorePath(derivationOutput.outPath));
+	}
+	return res;
+}
+
 std::vector<nix::DerivedPath> DerivationMeta::derivedPaths()
 {
 	auto derivationOutputToDerivedPath = [](DerivationOutput &output) {
@@ -160,7 +176,29 @@ DrvBuilder::~DrvBuilder()
 	nix::logger = this->originalLogger;
 }
 
-void DrvBuilder::realizeDerivations() {
+struct PathToLink
+{
+	std::string name;
+	stdfs::path path;
+};
+
+/** Automatically remove an existing symlink if and only if it is already a symlink to the Nix store. */
+void maybeReplaceNixSymlink(nix::Store &store, stdfs::path const &target, stdfs::path const &linkName)
+{
+	// If `linkName` is already a symlink *and* it's to the Nix store, then replace it.
+	// Otherwise, we don't want to replace other symlinks the user might have made.
+	if (stdfs::is_symlink(linkName)) {
+		auto followed = stdfs::read_symlink(linkName);
+		if (store.isInStore(followed.string())) {
+			stdfs::remove(linkName);
+		}
+	}
+
+	stdfs::create_directory_symlink(target, linkName);
+}
+
+void DrvBuilder::realizeDerivations()
+{
 	nix::StorePathSet willBuild;
 	nix::StorePathSet willSubst;
 	nix::StorePathSet unknown;
@@ -168,6 +206,7 @@ void DrvBuilder::realizeDerivations() {
 	uint64_t narSize;
 
 	auto outPaths = this->meta.outPaths();
+	auto fullOutPaths = this->meta.fullOutPaths(*this->store);
 
 	this->store->queryMissing(
 		this->meta.derivedPaths(),
@@ -196,8 +235,7 @@ void DrvBuilder::realizeDerivations() {
 		auto outPaths = iter::imap(derivationOutputToStorePath, pathOutputs);
 
 		eprintln("    {} -> {}",
-			wrapInColor(this->store->printStorePath(path),
-				AnsiFg::CYAN),
+			wrapInColor(this->store->printStorePath(path), AnsiFg::CYAN),
 			wrapInColorAndJoin(outPaths, ", ", AnsiFg::MAGENTA));
 	}
 
@@ -211,8 +249,33 @@ void DrvBuilder::realizeDerivations() {
 		eprintln("    {}", wrapInColor(this->store->printStorePath(path), AnsiFg::MAGENTA));
 	}
 
+	if (willSubst.empty() && willBuild.empty()) {
+		eprintln("Requested outputs {} are already realized.",
+			wrapInColorAndJoin(fullOutPaths, ", ", AnsiFg::MAGENTA)
+		);
+	}
+
 	// FIXME: what needs to happen for `unknown` to not be empty?
 	assert(unknown.empty());
 
-	this->store->buildPaths(this->meta.derivedPaths());
+	std::vector<nix::KeyedBuildResult> results = this->store->buildPathsWithResults(this->meta.derivedPaths());
+	assert(!results.empty());
+
+	// Now find the output paths of this build, and symlink them!
+	std::vector<PathToLink> pathsToLink;
+
+	for (nix::KeyedBuildResult &buildResult : results) {
+		for (std::pair<std::string const, nix::Realisation> &outPair : buildResult.builtOutputs) {
+			auto [name, realization] = outPair;
+			pathsToLink.emplace_back(name, this->store->printStorePath(realization.outPath));
+		}
+	}
+
+	for (auto const &[name, targetPath] : pathsToLink) {
+		std::string linkBasename = (pathsToLink.size() == 1) ? "result" : fmt::format("result-{}", name);
+		auto linkName = stdfs::current_path().append(linkBasename);
+
+		maybeReplaceNixSymlink(*this->store, targetPath, linkName);
+		eprintln("./{} -> {}", linkBasename, targetPath.string());
+	}
 }
