@@ -1,1 +1,2 @@
 #define CALLPACKAGE_FUN "@callpackage_fun@"
+#define XILLIB_DIR "@xillib_dir@"

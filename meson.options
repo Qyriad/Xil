@@ -1,4 +1,9 @@
+# vim: filetype=meson
 option('callpackage_fun', type : 'string',
-	value : 'target: (import <nixpkgs> { }).callPackage target { }',
-	description : 'The Nix expression to use for --call-package'
+  value : 'target: (import <nixpkgs> { }).callPackage target { }',
+  description : 'The Nix expression to use for --call-package',
+)
+option('xillib_dir', type : 'string',
+  value : './xillib',
+  description : 'The directory to embed for <xil>',
 )

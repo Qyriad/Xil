@@ -32,6 +32,9 @@ stdenv.mkDerivation (self: {
 
   # Workaround https://github.com/NixOS/nixpkgs/issues/19098.
   env.NIX_CFLAGS_LINK = lib.optionalString stdenv.isDarwin "-fuse-ld=lld";
+  mesonFlags = [
+    "-Dxillib_dir=${./xillib}"
+  ];
 
   nativeBuildInputs = [
     meson

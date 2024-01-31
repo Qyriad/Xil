@@ -28,7 +28,13 @@ foreach dep_name : dep_names
 endforeach
 
 conf_data = configuration_data()
+# Make xillib_dir absolute if it wasn't already.
+xillib_dir = get_option('xillib_dir')
+if not xillib_dir.startswith('/')
+  xillib_dir = meson.project_source_root() / xillib_dir
+endif
 conf_data.set('callpackage_fun', get_option('callpackage_fun'))
+conf_data.set('xillib_dir', get_option('xillib_dir'))
 configure_file(input : 'src/settings.hpp.in', output : 'settings.hpp', configuration : conf_data)
 
 srcs = [

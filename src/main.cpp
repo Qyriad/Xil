@@ -224,7 +224,14 @@ int main(int argc, char *argv[])
 	auto store = nix::openStore();
 
 	// FIXME: allow specifying SearchPath from command line.
-	auto state = std::make_shared<nix::EvalState>(nix::SearchPath{}, store, store);
+	auto xilEl = nix::SearchPath::Elem::parse(fmt::format("xil={}", XILLIB_DIR));
+	nix::SearchPath searchPath;
+	if (args.parser.is_subcommand_used(args.printCmd)) {
+		searchPath = nix::SearchPath{std::list<nix::SearchPath::Elem>{xilEl}};
+	} else {
+		searchPath = nix::SearchPath{};
+	}
+	auto state = std::make_shared<nix::EvalState>(searchPath, store, store);
 
 	// Handle eval and print commands.
 	if (auto evalArgs_ = args.getEvalArgs()) {
