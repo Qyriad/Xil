@@ -27,15 +27,25 @@ foreach dep_name : dep_names
   deps += dependency(dep_name, include_type : 'system')
 endforeach
 
-conf_data = configuration_data()
+settings_conf = configuration_data()
 # Make xillib_dir absolute if it wasn't already.
 xillib_dir = get_option('xillib_dir')
 if not xillib_dir.startswith('/')
   xillib_dir = meson.project_source_root() / xillib_dir
 endif
-conf_data.set('callpackage_fun', get_option('callpackage_fun'))
-conf_data.set('xillib_dir', get_option('xillib_dir'))
-configure_file(input : 'src/settings.hpp.in', output : 'settings.hpp', configuration : conf_data)
+settings_conf.set('callpackage_fun', get_option('callpackage_fun'))
+settings_conf.set('xillib_dir', get_option('xillib_dir'))
+configure_file(input : 'src/settings.hpp.in', output : 'settings.hpp', configuration : settings_conf)
+
+nix_version = dependency('nix-store').version().replace('.', '0')
+message('nix version is ' + nix_version)
+compat_conf = configuration_data()
+compat_conf.set('nix_version', nix_version)
+configure_file(
+  input : 'src/nixcompat.h.in',
+  output : 'nixcompat.h',
+  configuration: compat_conf,
+)
 
 srcs = [
   'src/main.cpp',

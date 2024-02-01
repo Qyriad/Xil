@@ -16,6 +16,7 @@
 
       in {
         packages.default = xil;
+        packages.unstable = xil.override { nix = pkgs.nixVersions.unstable; };
         devShells.default = pkgs.callPackage xil.mkShell { };
       }
 

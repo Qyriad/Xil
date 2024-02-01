@@ -27,6 +27,7 @@
 #include <fmt/core.h>
 #include <argparse/argparse.hpp>
 
+#include "nixcompat.h"
 #include "xil.hpp"
 #include "build.hpp"
 #include "settings.hpp"
@@ -121,7 +122,8 @@ struct XilEvalArgs
 			std::string const &str = exprStr.value();
 			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
 		} else if (auto const &exprFile = this->evalParser.present("--file")) {
-			auto const &file = nix::SourcePath(nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd()));
+			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
+			auto const file = state.rootPath(canonExprFilePath);
 			expr = state.parseExprFromFile(file);
 		} else if (auto const &exprFlake = this->evalParser.present("--flake")) {
 			eprintln("flakes not yet implemented");
@@ -196,7 +198,8 @@ struct XilArgs
 			std::string const &str = exprStr.value();
 			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
 		} else if (auto const &exprFile = evalParser.present("--file")) {
-			auto const &file = nix::SourcePath(nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd()));
+			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
+			auto const file = state.rootPath(canonExprFilePath);
 			expr = state.parseExprFromFile(file);
 		} else if (auto const &exprFlake = evalParser.present("--flake")) {
 			eprintln("flakes not yet implemented");

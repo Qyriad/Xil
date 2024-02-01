@@ -1,3 +1,4 @@
+#include "nixcompat.h"
 #include "xil.hpp"
 #include "attriter.hpp"
 
@@ -305,7 +306,7 @@ void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t inden
 			auto const &[name, value] = pair;
 			return name == "_type" &&
 				value.type() == nix::nString &&
-				std::string_view{value.string.s} == "pkgs"s;
+				nixValueSv(value) == "pkgs"s;
 		}
 	);
 
@@ -363,7 +364,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			nix::printLiteralBool(out, value.boolean);
 			break;
 		case nix::nString:
-			out << prettyString(value.str(), indentLevel);
+			out << prettyString(nixValueSv(value), indentLevel);
 			break;
 		case nix::nPath:
 			out << value.path().to_string();
@@ -393,7 +394,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 				if (drvPath->type() != nix::nString) {
 					out << fmt::format("invalid {}", drvPath->type());
 				} else {
-					out << drvPath->string.s;
+					out << nixValueSv(*drvPath);
 				}
 				out << "»";
 
