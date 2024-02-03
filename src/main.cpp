@@ -64,7 +64,7 @@ void addEvalArguments(ArgumentParser &parser, bool isPrint)
 		.help("Automatically call functions with default arguments");
 	parser.add_argument("--short-derivations")
 		.choices("always", "never", "auto")
-		.default_value(isPrint ? "auto" : "never")
+		.default_value(isPrint ? "auto" : "always")
 		.nargs(1)
 		.help("Print derivations as their drvPaths instead of as attrsets, or only at top-level for auto");
 }
