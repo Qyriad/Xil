@@ -1,0 +1,175 @@
+---
+Language: Cpp
+
+ColumnLimit: 110
+# Allow breaking comments too.
+ReflowComments: true
+
+#
+# Indentation
+#
+
+IndentWidth: 4
+# The tab width is really up to the editor and user, but clang-format does
+# everything in terms of columns, so I have to specify it here for any of the
+# other indentation numbers to work.
+TabWidth: 4
+# Tabs for indentation, spaces for alignment.
+UseTab: ForContinuationAndIndentation
+
+# Indent namespaces, since this isn't the kind of codebase where entire files
+# are one big namespace block.
+NamespaceIndentation: All
+
+#ConstructorInitializerIndentWidth: 4
+#ContinuationIndentWidth: 4
+
+# Indent multiline function calls like blocks.
+AlignAfterOpenBracket: BlockIndent
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 2
+AlignOperands: DontAlign # TODO: ?
+
+# Put templates above their declarations.
+AlwaysBreakTemplateDeclarations: Yes
+BreakBeforeConceptDeclarations: Always
+
+# Inspired by Linux C style.
+# SameLineBraces for expressions, NextLineBraces for items.
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass: true
+  AfterEnum: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  AfterExternBlock: true
+  AfterControlStatement: Never
+  AfterCaseLabel: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: false
+  BeforeWhile: false
+
+IndentRequiresClause: true # TODO: unsure
+RequiresClausePosition: OwnLine # TODO: unsure
+
+IndentAccessModifiers: false # TODO: unsure
+
+# Yes I indent case labels and inside them.
+IndentCaseLabels: true
+IndentCaseBlocks: false
+
+IndentGotoLabels: false # TODO: unsure
+
+# Use AfterExternBlock rules. (does this actually mean anything here?)
+IndentExternBlock: AfterExternBlock
+
+IndentPPDirectives: AfterHash # TODO: unsure
+PPIndentWidth: 1 # TODO: unsure
+
+
+#
+# Non-indentation continuation rules
+#
+
+# For constructor initializers, have the colon on the definition line,
+# and then the initilizers on the next.
+BreakConstructorInitializers: AfterColon
+# Then allow placing multiple initilizers on one line.
+PackConstructorInitializers: BinPack # TODO: unsure
+
+# Same thing for superclass specifiers.
+BreakInheritanceList: AfterColon
+
+# Leave attributes alone.
+BreakAfterAttributes: Leave
+
+# For things like expr + expr + expr across multiple lines, place the operator
+# at the beginning of the continuation line.
+# TODO: ?
+BreakBeforeBinaryOperators: NonAssignment
+
+AlwaysBreakBeforeMultilineStrings: false # TODO: ?
+
+ExperimentalAutoDetectBinPacking: true # TODO: ?
+
+# Allow multiline calls and definitions to place multiple arguments on one line.
+# I don't generally do this, but I do want to allow it.
+AllowAllArgumentsOnNextLine: true
+BinPackArguments: false
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackParameters: false
+
+#
+# Spacing
+#
+SpaceAfterTemplateKeyword: true
+DerivePointerAlignment: false
+PointerAlignment: Right # int *foo
+ReferenceAlignment: Right # int &foo
+QualifierAlignment: Right # int const foo
+SpaceAroundPointerQualifiers: After
+# Treat braced initializer constructor calls like function calls but with braces.
+Cpp11BracedListStyle: true
+# if (expr), but function_call(expr)
+SpaceBeforeParens: ControlStatements
+
+#
+# "Short" rules
+#
+#
+
+# The simple cases, stuff we always want to be multiline
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+# Allow single-line functions only if they're totally empty.
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+
+# If it's the argument of a function.
+AllowShortLambdasOnASingleLine: Inline
+#AllowShortCompoundRequirementOnASingleLine: true # requires clang-format 18
+
+#
+# Misc
+#
+
+# Don't format macros.
+AlignEscapedNewlines: DontAlign
+SkipMacroDefinitionBody: true
+
+# Use MaxLinesToKeep instead of specific rules for access specifiers.
+EmptyLineAfterAccessModifier: Leave
+EmptyLineBeforeAccessModifier: Leave
+
+# Likewise let the programmer decide how visually separated definitions are.
+SeparateDefinitionBlocks: Leave
+
+#
+# Include and using sorting
+#
+
+IncludeBlocks: Preserve
+
+SortUsingDeclarations: Never # TODO: unsure
+
+#
+# Undecided.
+#
+#AllowShortBlocksOnASingleLine: false
+#AlwaysBreakAfterReturnType: Never
+#CommentPragmas:
+#FixNamespaceComments: true
+#IndentWrappedFunctionNames: false
+#MaxEmptyLinesToKeep: 3
+#SortIncludes: CaseInsensitive
+
+#
+# Default
+#
+#RequiresExpressionIndentation: OuterScope
