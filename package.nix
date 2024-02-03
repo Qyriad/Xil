@@ -112,12 +112,12 @@ stdenv.mkDerivation (self: {
 
     mkShell = {
       mkShell,
-      clang-tools,
+      clang-tools_17,
       include-what-you-use,
     }: mkShell {
 
       packages = [
-        clang-tools
+        clang-tools_17
         include-what-you-use
       ];
 
