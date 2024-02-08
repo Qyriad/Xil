@@ -5,22 +5,25 @@
   };
 
   outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
+    flake-utils.lib.eachDefaultSystem (system: let
+      pkgs = import nixpkgs { inherit system; };
 
-        pkgs = import nixpkgs { inherit system; };
+      xil = pkgs.callPackage ./package.nix {
+        cppitertools = pkgs.callPackage ./cppitertools.nix { };
+      };
 
-        xil = pkgs.callPackage ./package.nix {
-          cppitertools = pkgs.callPackage ./cppitertools.nix { };
-        };
+      xilForNixUnstable = xil.override {
+        nix = pkgs.nixVersions.unstable;
+      };
 
-      in {
-        packages.default = xil;
-        packages.unstable = xil.override { nix = pkgs.nixVersions.unstable; };
-        devShells.default = pkgs.callPackage xil.mkShell { };
-      }
-
-    ) # eachDefaultSystem
+    in {
+      packages = {
+        default = xil;
+        unstable = xilForNixUnstable;
+      };
+      devShells.default = pkgs.callPackage xil.mkShell { };
+      checks = self.outputs.packages.${system};
+    }) # eachDefaultSystem
 
   ;# outputs
 }
