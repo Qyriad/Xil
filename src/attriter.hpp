@@ -71,6 +71,9 @@ struct AttrIterable
 		assert(attrs != nullptr);
 	}
 
+	// Copy assignment operator, since the default is implicitly deleted.
+	AttrIterable &operator=(AttrIterable &&rhs);
+
 	AttrKeyValueIter begin() const;
 
 	AttrKeyValueIter end() const;
@@ -78,4 +81,7 @@ struct AttrIterable
 	size_t size() const;
 
 	bool empty() const;
+
+	nix::Attr *find_by_key(std::string_view needle);
+	nix::Attr *find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec);
 };

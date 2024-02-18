@@ -1,22 +1,28 @@
 // vim: tabstop=4 shiftwidth=4 noexpandtab
 
+#include <algorithm>
 #include <cassert>
-#include <cstdlib>
-#include <exception>
-#include <functional>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
+#include <tuple>
 
 // Nix headers.
 #include <nix/config.h> // IWYU pragma: keep
+#include <nix/attr-path.hh>
+#include <nix/attr-set.hh>
 #include <nix/canon-path.hh>
 #include <nix/eval.hh>
+#include <nix/eval-cache.hh>
 #include <nix/eval-settings.hh>
+#include <flake/flake.hh>
+#include <nix/flake/flakeref.hh>
 #include <nix/input-accessor.hh>
+#include <nix/installable-flake.hh>
 #include <nix/nixexpr.hh>
+#include <nix/outputs-spec.hh>
 #include <nix/path.hh>
 #include <nix/search-path.hh>
 #include <nix/shared.hh>
@@ -24,10 +30,12 @@
 #include <nix/util.hh>
 #include <nix/value.hh>
 
-#include <fmt/core.h>
 #include <argparse/argparse.hpp>
+#include <fmt/core.h>
+#include <cppitertools/itertools.hpp>
 
-#include "nixcompat.h"
+#include "nixcompat.h" // IWYU pragma: keep
+#include "attriter.hpp"
 #include "xil.hpp"
 #include "build.hpp"
 #include "settings.hpp"
@@ -45,6 +53,62 @@ nix::Value callPackage(nix::EvalState &state, nix::Value &targetValue)
 
 	return nixCallFunction(state, callPackage, targetValue);
 }
+
+nix::InstallableFlake parseInstallable(
+	nix::EvalState &state,
+	std::string const &installableSpec,
+	InstallableMode installableMode = InstallableMode::BUILD
+)
+{
+	auto [fragmentedFlakeRef, outputsSpec] = nix::ExtendedOutputsSpec::parse(installableSpec);
+
+	auto [flakeRef, fragment] = nix::parseFlakeRefWithFragment(
+		std::string(fragmentedFlakeRef),
+		nix::CanonPath::fromCwd().c_str()
+	);
+	//eprintln("string: {}", fragment);
+	//eprintln("flake: {}", flakeRef.to_string());
+
+	auto const thisSystem = nix::settings.thisSystem.get();
+
+	//std::list<std::string> defaultFlakeAttrPaths{
+	//	//fmt::format("packages.{}.default", thisSystem),
+	//	//fmt::format("defaultPackage.{}", thisSystem),
+	//	".",
+	//};
+	auto defaultFlakeAttrPaths = installableMode.defaultFlakeAttrPaths(thisSystem);
+	//std::list<std::string> defaultFlakeAttrPrefixes{
+	//	fmt::format("packages.{}.", thisSystem),
+	//	fmt::format("legacyPackages.{}.", thisSystem),
+	//};
+	auto defaultFlakeAttrPrefixes = installableMode.defaultFlakeAttrPrefixes(thisSystem);
+
+	nix::flake::LockFlags flags;
+	flags.updateLockFile = false;
+	flags.writeLockFile = false;
+
+	// We need to make a new nix::EvalState for this to be at all sound >.>
+	auto statePtr = nix::ref(std::make_shared<nix::EvalState>(
+		state.getSearchPath(),
+		state.store
+	));
+
+	auto installableFlake = nix::InstallableFlake(
+		nullptr,
+		statePtr,
+		std::move(flakeRef),
+		fragment,
+		outputsSpec,
+		defaultFlakeAttrPaths,
+		defaultFlakeAttrPrefixes,
+		flags
+	);
+
+	eprintln("Returning installable {}", installableFlake.what());
+
+	return installableFlake;
+}
+
 
 // FIXME: refactor
 void addEvalArguments(ArgumentParser &parser, bool isPrint)
@@ -242,17 +306,87 @@ int main(int argc, char *argv[])
 		auto const &evalArgs = evalArgs_.value();
 		auto const &evalParser = evalArgs.evalParser;
 
-		nix::Expr *expr = evalArgs.getTargetExpr(*state);
-
 		nix::Value rootVal;
-		try {
-			state->eval(expr, rootVal);
-			if (evalParser.get<bool>("--call-package") && rootVal.isLambda()) {
-				rootVal = callPackage(*state, rootVal);
+
+		if (auto const &flakeSpec = evalParser.present("--flake")) {
+			nix::InstallableFlake instFlake = parseInstallable(
+				*state,
+				flakeSpec.value(),
+				InstallableMode::ALL
+			);
+			try {
+				using nix::flake::LockedFlake;
+				using nix::flake::LockFlags;
+
+				auto const lockedFlake = std::make_shared<LockedFlake>(
+					nix::flake::lockFlake(*state, instFlake.flakeRef, LockFlags{})
+				);
+				auto evalCache = nix::openEvalCache(*state, lockedFlake);
+				auto attrCursor = evalCache->getRoot();
+				auto asValue = attrCursor->forceValue();
+				//state->forceValue(asValue, nix::noPos);
+				std::vector<std::string> requestedAttrPaths = instFlake.getActualAttrPaths();
+
+				bool found = false;
+
+				for (std::string const &requestedPath : requestedAttrPaths) {
+
+					// This is a bit of a hack.
+					if (requestedPath == "") {
+						found = true;
+						rootVal = asValue;
+						break;
+					}
+
+					// Get the requested attr path from the installable fragment as Symbols.
+					std::vector<nix::Symbol> parsedAttrPath = nix::parseAttrPath(*state, requestedPath);
+
+					// Then convert them to string_views.
+					auto range = std::ranges::transform_view(
+						parsedAttrPath,
+						[&](nix::Symbol const &sym) {
+							return static_cast<std::string_view>(state->symbols[sym]);
+						}
+					);
+					std::vector<std::string_view> attrPathParts{range.begin(), range.end()};
+
+					nix::Bindings *flakeAttrs = asValue.attrs;
+					AttrIterable currentAttrs{flakeAttrs, state->symbols};
+
+					nix::Attr *result = currentAttrs.find_by_nested_key(*state, attrPathParts);
+					assert(result != nullptr);
+					if (result != currentAttrs.attrs->end()) {
+						assert(result != nullptr);
+						assert(result->value != nullptr);
+						found = true;
+						rootVal = *result->value;
+						break;
+					}
+				}
+				if (!found) {
+					eprintln(
+						"flake '{}' does not provide any of {}",
+						instFlake.what(),
+						fmt::join(requestedAttrPaths, ", ")
+					);
+					return 5;
+				}
+
+			} catch (nix::EvalError &e) {
+				eprintln("error while evaluating flake {}: {}", instFlake.what(), e.msg());
+				return 4;
 			}
-		} catch (nix::EvalError &e) {
-			eprintln("{}", e.msg());
-			return 1;
+		} else {
+			try {
+				nix::Expr *expr = evalArgs.getTargetExpr(*state);
+				state->eval(expr, rootVal);
+				if (evalParser.get<bool>("--call-package") && rootVal.isLambda()) {
+					rootVal = callPackage(*state, rootVal);
+				}
+			} catch (nix::EvalError &e) {
+				eprintln("{}", e.msg());
+				return 1;
+			}
 		}
 
 		auto const &shortDrvsOpt = evalParser.get<std::string>("--short-derivations");
@@ -273,7 +407,7 @@ int main(int argc, char *argv[])
 			// Add a trailing newline.
 			println("");
 		} catch (nix::Interrupted &e) {
-			eprintln("Interrupted: {}", e.msg());
+			eprintln("Interrupted: {}\n", e.msg());
 		} catch (nix::EvalError &e) {
 			eprintln("{}", e.msg());
 			return 2;

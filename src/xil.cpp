@@ -1,16 +1,17 @@
-#include "nixcompat.h"
 #include "xil.hpp"
-#include "attriter.hpp"
 
 #include <iterator>
+
+// Nix headers.
+#include <nix/nixexpr.hh>
+#include <nix/print.hh>
 
 #include <cppitertools/itertools.hpp>
 #include <fmt/args.h>
 #include <fmt/format.h>
 
-// Nix headers.
-#include <print.hh>
-#include <nixexpr.hh>
+#include "attriter.hpp"
+#include "nixcompat.h"
 
 using namespace std::literals::string_literals;
 
@@ -120,7 +121,7 @@ OptString Printer::exprName(nix::Expr *expr)
 	// match on it.
 	auto polymorphicExpr = ExprT::from(expr);
 
-	return std::visit(overloaded {
+	return std::visit(overloaded{
 		[&](nix::ExprVar *expr) -> OptString {
 			// FIXME: Can a variable have an invalid Symbol as its name?
 			assert(expr->name);
@@ -210,7 +211,6 @@ std::string format_as(Indent const indentation)
 // Prints single-line strings in quotes, and multiline strings as a '' string, formatted nicely.
 std::string prettyString(std::string_view nixString, uint32_t indentLevel)
 {
-	//fmt::dynamic_format_arg_store<fmt::format_context> result;
 	// TODO: this, or std::stringstream?
 	auto buffer = fmt::memory_buffer();
 
@@ -304,9 +304,7 @@ void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t inden
 		attrIter.end(),
 		[](std::tuple<std::string_view const, nix::Value const &> pair) -> bool {
 			auto const &[name, value] = pair;
-			return name == "_type" &&
-				value.type() == nix::nString &&
-				nixValueSv(value) == "pkgs"s;
+			return name == "_type" && value.type() == nix::nString && nixValueSv(value) == "pkgs"s;
 		}
 	);
 
@@ -558,4 +556,90 @@ OptString Printer::safeForce(nix::Value &value, nix::PosIdx position)
 	}
 
 	return std::nullopt;
+}
+
+constexpr InstallableMode::operator InstallableMode::Value() const noexcept
+{
+	return this->inner;
+}
+
+std::list<std::string> InstallableMode::defaultFlakeAttrPaths(std::string_view const system) const
+{
+	switch (*this) {
+		case NONE:
+			return std::list<std::string>{
+				"",
+			};
+		case BUILD:
+			return std::list<std::string>{
+				fmt::format("packages.{}.default", system),
+				fmt::format("defaultPackage.{}", system),
+				fmt::format("legacyPackages.{}.default", system),
+			};
+		case DEVSHELL:
+			return std::list<std::string>{
+				fmt::format("devShells.{}.default", system),
+			};
+		case APP:
+			return std::list<std::string>{
+				fmt::format("apps.{}.default", system),
+				fmt::format("packages.{}.default", system),
+				fmt::format("defaultPackage.{}", system),
+				fmt::format("legacyPackages.{}.default", system),
+			};
+		case ALL:
+			return std::list<std::string>{
+				fmt::format(""),
+				fmt::format("."),
+				fmt::format(".default"),
+				fmt::format("{}.default", system),
+				fmt::format("packages.{}.default", system),
+				fmt::format("defaultPackage.{}", system),
+				fmt::format("legacyPackages.{}.default", system),
+				fmt::format("devShells.{}.default", system),
+				fmt::format("apps.{}.default", system),
+				fmt::format("checks.{}.default", system),
+			};
+
+		default:
+			assert(nullptr == "unreachable");
+	}
+}
+
+std::list<std::string> InstallableMode::defaultFlakeAttrPrefixes(std::string_view const system) const
+{
+	switch (*this) {
+		case NONE:
+			return std::list<std::string>{
+				"",
+			};
+		case BUILD:
+			return std::list<std::string>{
+				fmt::format("packages.{}.", system),
+				fmt::format("legacyPackages.{}.", system),
+			};
+		case DEVSHELL:
+			return std::list<std::string>{
+				fmt::format("devShells.{}.", system),
+			};
+		case APP:
+			return std::list<std::string>{
+				fmt::format("apps.{}.", system),
+				fmt::format("packages.{}.", system),
+				fmt::format("legacyPackages.{}.", system),
+			};
+		case ALL:
+			return std::list<std::string>{
+				fmt::format(""),
+				fmt::format("{}.", system),
+				fmt::format("packages.{}.", system),
+				fmt::format("legacyPackages.{}.", system),
+				fmt::format("devShells.{}.", system),
+				fmt::format("apps.{}.", system),
+				fmt::format("checks.{}.", system),
+			};
+
+		default:
+			assert(nullptr == "unreachable");
+	}
 }

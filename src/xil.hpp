@@ -5,22 +5,93 @@
 #include <concepts>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <string_view>
+#include <stdexcept>
 #include <type_traits>
 
 // Nix headers.
-#include <config.h>
-#include <shared.hh>
-#include <eval.hh>
+#include <nix/config.h>
+#include <nix/eval.hh>
+#include <nix/shared.hh>
 
+#include <argparse/argparse.hpp>
+#include <boost/core/demangle.hpp>
 #include <fmt/core.h>
 #include <fmt/ostream.h>
-#include <boost/core/demangle.hpp>
-#include <argparse/argparse.hpp>
 
 #include "settings.hpp"
+
+#define RANGE(a) a.begin(), a.end()
+
+template <typename T>
+concept Iterable = requires (T v) {
+	v.begin();
+	v.end();
+};
+
+template <typename T, typename V, typename R>
+concept Callable = requires(T v, V foo) {
+	{ v(foo) -> R };
+};
+
+//template <
+//	//typenamet RangeT,
+//	//typename CallableT,
+//	Callable<bool, int> CallableT,
+//	//typename IteratorT = typename RangeT::iterator
+//	typename CallbackT
+//>
+//auto mkRangeArgs(
+//	auto range,
+//	CallableT &&callable,
+//	//std::function<typename RangeT::iterator(typename RangeT::iterator, typename RangeT::iterator, CallbackT)> callable,
+//	CallbackT cb
+//)
+//{
+//	auto &&begin = std::begin(range);
+//	auto &&end = std::end(range);
+//
+//	//static_assert(std::is_same_v<decltype(range.begin()), std::vector<int>::iterator>);
+//	//static_assert(std::is_same_v<decltype(cb), std::function<bool(int)>>);
+//
+//	//using ArgsT = std::tuple<decltype(begin), decltype(end), CallbackT>;
+//	//ArgsT args{begin, end, cb};
+//	//return std::apply(callable, args);
+//
+//	using IteratorT = decltype(begin);
+//
+//	std::function<IteratorT(IteratorT, IteratorT, CallbackT)> coerced(callable);
+//	return callable(begin, end, cb);
+//}
+
+template <typename T>
+struct Ext
+{
+	T &&self;
+
+	Ext(T &&self) : self(self) { }
+};
+
+template <typename T>
+struct Ext<std::vector<T>>
+{
+	//using Self = std::vector<T>;
+	std::vector<T> &&self;
+
+	Ext(std::vector<T> &&self) : self(self) { }
+
+	template <typename FromRangeT, typename FromIterT = FromRangeT::iterator>
+	static std::vector<T> from(FromRangeT &&range)
+	{
+		FromIterT begin = range.begin();
+		FromIterT end = range.end();
+		return std::vector<T>{begin, end};
+	}
+};
 
 namespace nix
 {
@@ -140,6 +211,48 @@ nix::Value nixCallFunction(nix::EvalState &state, ValueT &&fun, ValueT &&callOn,
 	return out;
 }
 
+/** Constructs a std::vector<T> from a std::ranges::range of the same type. */
+template <
+	typename RangeT
+>
+requires requires (RangeT range) {
+	range.begin();
+	range.end();
+}
+auto iterToVec(RangeT &&range) -> std::vector<typename decltype(range.begin())::value_type>
+{
+	// Calls vector's "from range" constructor (containers.sequences.vectors.cons/9).
+	return std::vector{range.begin(), range.end()};
+}
+
+template <typename IterT>
+struct ToVec
+{
+	IterT begin;
+	IterT end;
+
+	using value_type = std::iter_value_t<IterT>;
+
+	template <typename RangeT>
+	ToVec(RangeT &&range) : begin(range.begin()), end(range.end()) { }
+
+	template <typename ValueT>
+	operator std::vector<ValueT>() const
+	{
+		return std::vector{this->begin, this->end()};
+	}
+
+	operator std::vector<value_type>() const
+	{
+		return std::vector{this->begin(), this->end()};
+	}
+
+};
+
+template <typename RangeT>
+//ToVec(RangeT &&range) -> ToVec<typename std::iterator_traits<typename RangeT::iterator>::value_type>;
+ToVec(RangeT &&range) -> ToVec<typename RangeT::iterator>;
+
 // Has a fmt::format_as, and an operator<<.
 struct Indent
 {
@@ -197,6 +310,49 @@ struct Printer
 
 	/** Attempt to force a value, returning a string for the kind of error if any. */
 	OptString safeForce(nix::Value &value, nix::PosIdx position = nix::noPos);
+};
+
+// Represents the different "modes" that installables can be referenced in.
+// For example `nix build` uses packages.${system} and legacyPackages.${system},
+// but `nix develop` uses devShells.${system}.
+// Without a mode, we don't know what attributes an installable fragment is meant
+// to access.
+struct InstallableMode
+{
+	// The wrapper struct is here so we can have things like Methods™.
+	enum class Value
+	{
+		NONE,
+		// packages.${system}
+		// legacyPackages.${system}
+		BUILD,
+		// devShels.${system}
+		DEVSHELL,
+		// apps.${system}
+		// packages.${system}
+		// legacyPackages.${system}
+		// Used for `nix run`.
+		APP,
+		ALL,
+	};
+
+	using enum Value;
+
+	Value inner;
+
+	// We specifically want this to be implicit so things like
+	// `InstallableMode mode = InstallableMode::BUILD` work.
+	constexpr InstallableMode(Value v) : inner(v) { }
+
+	// This will make switch case "just work".
+	constexpr operator Value() const noexcept;
+
+	// And this is to remove the transitive boolean coercion added by the
+	// above conversion operator.
+	explicit operator bool() = delete;
+
+	std::list<std::string> defaultFlakeAttrPaths(std::string_view const system) const;
+	std::list<std::string> defaultFlakeAttrPrefixes(std::string_view const system) const;
 };
 
 template <typename T>

@@ -1,13 +1,14 @@
 #pragma once
 
 #include <string_view>
+#include <type_traits>
 #include <nix/config.h>
-#include <nix/value.hh>
 
 #if @nix_version@ < 201902
 
 // For nix::Interrupted
 #include <nix/util.hh>
+#include <nix/value.hh>
 
 // For the string value refactor in NixOS/nix/399ef8442012308f480ea5841fb6ac732207e03d.
 inline std::string_view nixValueSv(nix::Value const &value)
@@ -19,6 +20,8 @@ inline std::string_view nixValueSv(nix::Value const &value)
 
 // For nix::Interrupted
 #include <nix/signals.hh>
+#include <nix/util.hh>
+#include <nix/value.hh>
 
 // For the string value refactor in NixOS/nix/399ef8442012308f480ea5841fb6ac732207e03d.
 inline std::string_view nixValueSv(nix::Value const &value)
@@ -27,3 +30,5 @@ inline std::string_view nixValueSv(nix::Value const &value)
 }
 
 #endif
+
+static_assert(std::is_same_v<nix::Interrupted, nix::Interrupted>);
