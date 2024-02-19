@@ -162,8 +162,8 @@ struct XilEvaluatorArgs
 		root(root), evalParser(evalParser) { }
 
 	/** Gets the nix::Value from whichever of --expr, --file, and --flake was used.
-	  Accordingly, this function may throw if the expression fails to evaluate.
-	  */
+	Accordingly, this function may throw if the expression fails to evaluate.
+	*/
 	nix::Value getTargetValue(nix::EvalState &state, InstallableMode installableMode = InstallableMode::ALL) const
 	{
 		nix::Expr *expr = nullptr;
@@ -192,18 +192,22 @@ struct XilEvaluatorArgs
 			using nix::flake::LockedFlake;
 			using nix::flake::LockFlags;
 
+			// First we need to lock the flake, or Nix will complain.
 			auto const lockedFlake = std::make_shared<LockedFlake>(
 				// FIXME: CLI does not allow changing lock flags.
 				nix::flake::lockFlake(state, instFlake.flakeRef, LockFlags{})
-				);
+			);
 
+			// We also can only do most things through the eval cache, so let's open that.
 			auto evalCache = nix::openEvalCache(state, lockedFlake);
 			auto attrCursor = evalCache->getRoot();
 			auto asValue = attrCursor->forceValue();
 
-			std::vector<std::string> requestedAttrPaths = instFlake.getActualAttrPaths();
-
+			// Now let's work on the installable fragment part.
+			// For each possible attrpath the fragment could refer to,
+			// we'll check if it actually exists, and use it if it does.
 			bool found = false;
+			std::vector<std::string> const requestedAttrPaths = instFlake.getActualAttrPaths();
 			for (std::string const &requestedPath : requestedAttrPaths) {
 
 				// This is a bit of a hack.
@@ -215,11 +219,11 @@ struct XilEvaluatorArgs
 
 				// Get the requested attr path from the installable fragment as Symbols,
 				// and then convert them to string_views.
-				auto symToSv = [&](nix::Symbol const &sym) {
+				auto const symToSv = [&](nix::Symbol const &sym) {
 					return static_cast<std::string_view>(state.symbols[sym]);
 				};
-				std::vector<nix::Symbol> parsedAttrPath = nix::parseAttrPath(state, requestedPath);
-				auto range = std::ranges::transform_view(parsedAttrPath, symToSv);
+				std::vector<nix::Symbol> const parsedAttrPath = nix::parseAttrPath(state, requestedPath);
+				auto const range = std::ranges::transform_view(parsedAttrPath, symToSv);
 				std::vector<std::string_view> attrPathParts{range.begin(), range.end()};
 
 				assert(asValue.type() == nix::nAttrs);
@@ -233,12 +237,12 @@ struct XilEvaluatorArgs
 			}
 
 			if (!found) {
-				throw nix::EvalError(
-					fmt::format("flake '{}' does not provide any of {}",
-						instFlake.what(),
-						fmt::join(requestedAttrPaths, ", ")
-						)
-					);
+				auto msg = fmt::format(
+					"flake '{}' does not provide any of {}",
+					instFlake.what(),
+					fmt::join(requestedAttrPaths, ", ")
+				);
+				throw nix::EvalError(msg);
 			}
 		} else {
 			assert("unreachable" == nullptr);

@@ -84,6 +84,6 @@ struct AttrIterable
 
 	bool empty() const;
 
-	OptionalRef<nix::Attr> find_by_key(std::string_view needle);
+	OptionalRef<nix::Attr> find_by_key(std::string_view const needle);
 	OptionalRef<nix::Attr> find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec);
 };
