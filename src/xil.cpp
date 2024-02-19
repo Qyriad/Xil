@@ -587,6 +587,11 @@ std::list<std::string> InstallableMode::defaultFlakeAttrPaths(std::string_view c
 				fmt::format("defaultPackage.{}", system),
 				fmt::format("legacyPackages.{}.default", system),
 			};
+		case CHECKS:
+			return std::list<std::string>{
+				fmt::format("checks.{}.default", system),
+				fmt::format("{}.defaultCheck", system),
+			};
 		case ALL:
 			return std::list<std::string>{
 				fmt::format(""),
@@ -627,6 +632,10 @@ std::list<std::string> InstallableMode::defaultFlakeAttrPrefixes(std::string_vie
 				fmt::format("apps.{}.", system),
 				fmt::format("packages.{}.", system),
 				fmt::format("legacyPackages.{}.", system),
+			};
+		case CHECKS:
+			return std::list<std::string>{
+				fmt::format("checks.{}.", system),
 			};
 		case ALL:
 			return std::list<std::string>{

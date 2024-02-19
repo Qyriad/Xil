@@ -333,6 +333,7 @@ struct InstallableMode
 		// legacyPackages.${system}
 		// Used for `nix run`.
 		APP,
+		CHECKS,
 		ALL,
 	};
 

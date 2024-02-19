@@ -8,6 +8,8 @@
 #include <attr-set.hh>
 #include <value.hh>
 
+#include "xil.hpp"
+
 struct AttrKeyValueIter
 {
 	using iterator_category = std::forward_iterator_tag;
@@ -82,6 +84,6 @@ struct AttrIterable
 
 	bool empty() const;
 
-	nix::Attr *find_by_key(std::string_view needle);
-	nix::Attr *find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec);
+	OptionalRef<nix::Attr> find_by_key(std::string_view needle);
+	OptionalRef<nix::Attr> find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec);
 };

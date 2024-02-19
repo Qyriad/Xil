@@ -66,22 +66,12 @@ nix::InstallableFlake parseInstallable(
 		std::string(fragmentedFlakeRef),
 		nix::CanonPath::fromCwd().c_str()
 	);
-	//eprintln("string: {}", fragment);
-	//eprintln("flake: {}", flakeRef.to_string());
 
 	auto const thisSystem = nix::settings.thisSystem.get();
 
-	//std::list<std::string> defaultFlakeAttrPaths{
-	//	//fmt::format("packages.{}.default", thisSystem),
-	//	//fmt::format("defaultPackage.{}", thisSystem),
-	//	".",
-	//};
 	auto defaultFlakeAttrPaths = installableMode.defaultFlakeAttrPaths(thisSystem);
-	//std::list<std::string> defaultFlakeAttrPrefixes{
-	//	fmt::format("packages.{}.", thisSystem),
-	//	fmt::format("legacyPackages.{}.", thisSystem),
-	//};
 	auto defaultFlakeAttrPrefixes = installableMode.defaultFlakeAttrPrefixes(thisSystem);
+
 
 	nix::flake::LockFlags flags;
 	flags.updateLockFile = false;
@@ -148,19 +138,129 @@ void addExprArguments(ArgumentParser &parser)
 	group.add_argument("--flake", "-f")
 		.nargs(1)
 		.metavar("FLAKEREF")
-		.help("Evaluate a flake (unimplemented)");
+		.help("Evaluate a flake");
 
 	parser.add_argument("--call-package", "-C")
 		.flag()
 		.help(fmt::format("Use `{}` to call the target expression", CALLPACKAGE_FUN));
+
+	parser.add_argument("--installable-mode")
+		.nargs(1)
+		.metavar("MODE")
+		.choices("all", "none", "build", "devshell", "app", "check")
+		.help("Sets the default attribute prefixes for flake installable fragments");
 }
 
-struct XilEvalArgs
+/** Base class for arguments that evaluate Nix expressions in some way. */
+struct XilEvaluatorArgs
 {
 	ArgumentParser &root;
+	// The subcommand parser used for this evaluator.
 	ArgumentParser &evalParser;
+
+	XilEvaluatorArgs(ArgumentParser &root, ArgumentParser &evalParser) :
+		root(root), evalParser(evalParser) { }
+
+	/** Gets the nix::Value from whichever of --expr, --file, and --flake was used.
+	  Accordingly, this function may throw if the expression fails to evaluate.
+	  */
+	nix::Value getTargetValue(nix::EvalState &state, InstallableMode installableMode = InstallableMode::ALL) const
+	{
+		nix::Expr *expr = nullptr;
+		nix::Value outValue;
+
+		if (auto const &exprStr = this->evalParser.present("--expr")) {
+			std::string const &str = exprStr.value();
+			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
+			state.eval(expr, outValue);
+
+		} else if (auto const &exprFile = this->evalParser.present("--file")) {
+			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
+			auto const file = state.rootPath(canonExprFilePath);
+			expr = state.parseExprFromFile(file);
+			state.eval(expr, outValue);
+
+		} else if (auto const &flakeSpec = this->evalParser.present("--flake")) {
+
+			// If we have a flake, then we'll be getting a Value directly, not a nix::Expr.
+			nix::InstallableFlake instFlake = parseInstallable(
+				state,
+				flakeSpec.value(),
+				installableMode
+			);
+
+			using nix::flake::LockedFlake;
+			using nix::flake::LockFlags;
+
+			auto const lockedFlake = std::make_shared<LockedFlake>(
+				// FIXME: CLI does not allow changing lock flags.
+				nix::flake::lockFlake(state, instFlake.flakeRef, LockFlags{})
+				);
+
+			auto evalCache = nix::openEvalCache(state, lockedFlake);
+			auto attrCursor = evalCache->getRoot();
+			auto asValue = attrCursor->forceValue();
+
+			std::vector<std::string> requestedAttrPaths = instFlake.getActualAttrPaths();
+
+			bool found = false;
+			for (std::string const &requestedPath : requestedAttrPaths) {
+
+				// This is a bit of a hack.
+				if (requestedPath.empty()) {
+					found = true;
+					outValue = asValue;
+					break;
+				}
+
+				// Get the requested attr path from the installable fragment as Symbols,
+				// and then convert them to string_views.
+				auto symToSv = [&](nix::Symbol const &sym) {
+					return static_cast<std::string_view>(state.symbols[sym]);
+				};
+				std::vector<nix::Symbol> parsedAttrPath = nix::parseAttrPath(state, requestedPath);
+				auto range = std::ranges::transform_view(parsedAttrPath, symToSv);
+				std::vector<std::string_view> attrPathParts{range.begin(), range.end()};
+
+				assert(asValue.type() == nix::nAttrs);
+
+				AttrIterable currentAttrs{asValue.attrs, state.symbols};
+				OptionalRef<nix::Attr> result = currentAttrs.find_by_nested_key(state, attrPathParts);
+				if (result.has_value()) {
+					found = true;
+					outValue = *result->get().value;
+				}
+			}
+
+			if (!found) {
+				throw nix::EvalError(
+					fmt::format("flake '{}' does not provide any of {}",
+						instFlake.what(),
+						fmt::join(requestedAttrPaths, ", ")
+						)
+					);
+			}
+		} else {
+			assert("unreachable" == nullptr);
+		}
+
+		return outValue;
+	}
+};
+
+/** Struct for arguments that end up printing the result of a Nix evaluation. */
+struct XilPrinterArgs : public XilEvaluatorArgs
+{
 	ArgumentParser &printCmd;
 	ArgumentParser &evalCmd;
+
+	XilPrinterArgs(
+		ArgumentParser &rootParser,
+		ArgumentParser &evalParser,
+		ArgumentParser &printCmd,
+		ArgumentParser &evalCmd
+	) : XilEvaluatorArgs(rootParser, evalParser), printCmd(printCmd), evalCmd(evalCmd)
+	{ }
 
 	bool isPrint() const noexcept
 	{
@@ -175,28 +275,6 @@ struct XilEvalArgs
 	bool shortErrors() const noexcept
 	{
 		return this->evalParser.get<bool>("--short-errors") || this->isPrint();
-	}
-
-	/** Gets the nix::Expr from whichever of --expr, --file, and --flake was used. */
-	nix::Expr *getTargetExpr(nix::EvalState &state) const
-	{
-		nix::Expr *expr;
-
-		if (auto const &exprStr = this->evalParser.present("--expr")) {
-			std::string const &str = exprStr.value();
-			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
-		} else if (auto const &exprFile = this->evalParser.present("--file")) {
-			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
-			auto const file = state.rootPath(canonExprFilePath);
-			expr = state.parseExprFromFile(file);
-		} else if (auto const &exprFlake = this->evalParser.present("--flake")) {
-			eprintln("flakes not yet implemented");
-			abort();
-		} else {
-			assert("unreachable" == nullptr);
-		}
-
-		return expr;
 	}
 };
 
@@ -232,47 +310,40 @@ struct XilArgs
 	}
 
 	/** Gets the XilArgs, if any, for `eval` or `print`, whichever is used. */
-	std::optional<XilEvalArgs> getEvalArgs() noexcept
+	std::optional<XilPrinterArgs> getPrinterArgs() noexcept
 	{
 		if (this->parser.is_subcommand_used(this->evalCmd)) {
-			return XilEvalArgs{
-				.root = this->parser,
-				.evalParser = this->evalCmd,
-				.printCmd = this->printCmd,
-				.evalCmd = this->evalCmd,
+			return XilPrinterArgs{
+				this->parser, // root
+				this->evalCmd, // evalParser
+				this->printCmd, // printCmd
+				this->evalCmd // evalCmd
 			};
 		} else if (this->parser.is_subcommand_used(this->printCmd)) {
-			return XilEvalArgs{
-				.root = this->parser,
-				.evalParser = this->printCmd,
-				.printCmd = this->printCmd,
-				.evalCmd = this->evalCmd,
+			return XilPrinterArgs{
+				this->parser, // root
+				this->printCmd, // evalParser
+				this->printCmd, //printCmd
+				this->evalCmd // evalCmd
 			};
 		}
 
 		return std::nullopt;
 	}
 
-	/** Gets the nix::Expr from whichever of --expr, --file, and --flake was used. */
-	nix::Expr *getTargetExpr(ArgumentParser const &evalParser, nix::EvalState &state) const
+	/** Gets the XilEvaluatorArgs, if any, for `eval`, `print`, or `build`, whichever is used. */
+	std::optional<XilEvaluatorArgs> getEvalArgs() noexcept
 	{
-		nix::Expr *expr;
-
-		if (auto const &exprStr = evalParser.present("--expr")) {
-			std::string const &str = exprStr.value();
-			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
-		} else if (auto const &exprFile = evalParser.present("--file")) {
-			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
-			auto const file = state.rootPath(canonExprFilePath);
-			expr = state.parseExprFromFile(file);
-		} else if (auto const &exprFlake = evalParser.present("--flake")) {
-			eprintln("flakes not yet implemented");
-			abort();
-		} else {
-			assert("unreachable" == nullptr);
+		if (this->parser.is_subcommand_used(this->evalCmd) || this->parser.is_subcommand_used(this->printCmd)) {
+			return this->getPrinterArgs();
+		} else if (this->parser.is_subcommand_used(this->buildCmd)) {
+			return XilEvaluatorArgs{
+				this->parser, // root
+				this->buildCmd // evalParsr
+			};
 		}
 
-		return expr;
+		return std::nullopt;
 	}
 };
 
@@ -301,92 +372,21 @@ int main(int argc, char *argv[])
 	auto state = std::make_shared<nix::EvalState>(searchPath, store, store);
 
 	// Handle eval and print commands.
-	if (auto evalArgs_ = args.getEvalArgs()) {
+	if (auto evalArgs_ = args.getPrinterArgs()) {
 		// Unwrap the optional.
 		auto const &evalArgs = evalArgs_.value();
 		auto const &evalParser = evalArgs.evalParser;
 
 		nix::Value rootVal;
 
-		if (auto const &flakeSpec = evalParser.present("--flake")) {
-			nix::InstallableFlake instFlake = parseInstallable(
-				*state,
-				flakeSpec.value(),
-				InstallableMode::ALL
-			);
-			try {
-				using nix::flake::LockedFlake;
-				using nix::flake::LockFlags;
-
-				auto const lockedFlake = std::make_shared<LockedFlake>(
-					nix::flake::lockFlake(*state, instFlake.flakeRef, LockFlags{})
-				);
-				auto evalCache = nix::openEvalCache(*state, lockedFlake);
-				auto attrCursor = evalCache->getRoot();
-				auto asValue = attrCursor->forceValue();
-				//state->forceValue(asValue, nix::noPos);
-				std::vector<std::string> requestedAttrPaths = instFlake.getActualAttrPaths();
-
-				bool found = false;
-
-				for (std::string const &requestedPath : requestedAttrPaths) {
-
-					// This is a bit of a hack.
-					if (requestedPath == "") {
-						found = true;
-						rootVal = asValue;
-						break;
-					}
-
-					// Get the requested attr path from the installable fragment as Symbols.
-					std::vector<nix::Symbol> parsedAttrPath = nix::parseAttrPath(*state, requestedPath);
-
-					// Then convert them to string_views.
-					auto range = std::ranges::transform_view(
-						parsedAttrPath,
-						[&](nix::Symbol const &sym) {
-							return static_cast<std::string_view>(state->symbols[sym]);
-						}
-					);
-					std::vector<std::string_view> attrPathParts{range.begin(), range.end()};
-
-					nix::Bindings *flakeAttrs = asValue.attrs;
-					AttrIterable currentAttrs{flakeAttrs, state->symbols};
-
-					nix::Attr *result = currentAttrs.find_by_nested_key(*state, attrPathParts);
-					assert(result != nullptr);
-					if (result != currentAttrs.attrs->end()) {
-						assert(result != nullptr);
-						assert(result->value != nullptr);
-						found = true;
-						rootVal = *result->value;
-						break;
-					}
-				}
-				if (!found) {
-					eprintln(
-						"flake '{}' does not provide any of {}",
-						instFlake.what(),
-						fmt::join(requestedAttrPaths, ", ")
-					);
-					return 5;
-				}
-
-			} catch (nix::EvalError &e) {
-				eprintln("error while evaluating flake {}: {}", instFlake.what(), e.msg());
-				return 4;
+		try {
+			rootVal = evalArgs.getTargetValue(*state);
+			if (evalParser.get<bool>("--call-package") && rootVal.isLambda()) {
+				rootVal = callPackage(*state, rootVal);
 			}
-		} else {
-			try {
-				nix::Expr *expr = evalArgs.getTargetExpr(*state);
-				state->eval(expr, rootVal);
-				if (evalParser.get<bool>("--call-package") && rootVal.isLambda()) {
-					rootVal = callPackage(*state, rootVal);
-				}
-			} catch (nix::EvalError &e) {
-				eprintln("{}", e.msg());
-				return 1;
-			}
+		} catch (nix::EvalError &e) {
+			eprintln("{}", e.msg());
+			return 1;
 		}
 
 		auto const &shortDrvsOpt = evalParser.get<std::string>("--short-derivations");
@@ -413,10 +413,9 @@ int main(int argc, char *argv[])
 			return 2;
 		}
 	} else if (args.parser.is_subcommand_used("build")) {
-		nix::Expr *expr = args.getTargetExpr(args.buildCmd, *state);
-		nix::Value rootVal;
+		auto evalArgs = args.getEvalArgs().value();
 		try {
-			state->eval(expr, rootVal);
+			nix::Value rootVal = evalArgs.getTargetValue(*state, InstallableMode::BUILD);
 
 			if (args.buildCmd.get<bool>("--call-package")) {
 				rootVal = callPackage(*state, rootVal);

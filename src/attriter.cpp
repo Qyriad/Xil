@@ -71,46 +71,44 @@ bool operator!=(AttrKeyValueIter const &lhs, AttrKeyValueIter const &rhs) noexce
 	return lhs.current != rhs.current;
 }
 
-nix::Attr *AttrIterable::find_by_key(std::string_view needle)
+OptionalRef<nix::Attr> AttrIterable::find_by_key(std::string_view needle)
 {
 	for (auto &attr : *this->attrs) {
 		auto name = static_cast<std::string_view>(this->symbols[attr.name]);
 		if (name == needle) {
-			return &attr;
+			return std::make_optional(std::ref(attr));
 		}
 	}
 
-	return this->attrs->end();
+	return std::nullopt;
 }
 
-nix::Attr *AttrIterable::find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec)
+OptionalRef<nix::Attr> AttrIterable::find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec)
 {
 	if (needleSpec.empty()) {
-		eprintln("needleSpec.empty()");
-		return this->attrs->end();
+		return std::nullopt;
 	}
 
 	decltype(needleSpec)::iterator current = needleSpec.begin();
-	auto *currentFound = this->find_by_key(*current);
+	OptionalRef<nix::Attr> currentFound = this->find_by_key(*current);
+	if (!currentFound.has_value()) {
+		return std::nullopt;
+	}
 
 	std::span<std::string_view> rest = needleSpec.subspan(1);
+
+	// If we don't have any more attrs to recurse into, then this is The One.
 	if (rest.empty()) {
 		return currentFound;
 	}
 
-	if (currentFound->value == nullptr) {
-		return this->attrs->end();
-	}
-	state.forceValue(*currentFound->value, nix::noPos);
-	if (currentFound->value->type() != nix::nAttrs) {
-		return this->attrs->end();
+	assert(currentFound->get().value != nullptr);
+	state.forceValue(*currentFound->get().value, nix::noPos);
+	if (currentFound->get().value->type() != nix::nAttrs) {
+		return std::nullopt;
 	}
 
-	auto *nested = AttrIterable{currentFound->value->attrs, this->symbols}.find_by_nested_key(state, rest);
-	if (nested == currentFound->value->attrs->end()) {
-		return this->attrs->end();
-	}
-	return nested;
+	return AttrIterable{currentFound->get().value->attrs, this->symbols}.find_by_nested_key(state, rest);
 }
 
 AttrIterable &AttrIterable::operator=(AttrIterable &&rhs)
