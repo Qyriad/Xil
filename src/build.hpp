@@ -37,11 +37,14 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
+#include "logging.hpp"
+
 using namespace std::literals::string_literals;
 
 namespace nix
 {
 	std::string_view format_as(nix::StorePath const path) noexcept;
+	std::string format_as(nix::Logger::Field) noexcept;
 }
 
 #define STRINGIFY__(a) #a
@@ -82,29 +85,10 @@ std::string wrapInColorAndJoin(Range &&range, std::string_view separator, std::s
 	);
 }
 
-std::string logLevelToAnsiColor(nix::Verbosity level);
-
-std::string logLevelName(nix::Verbosity level);
-
-std::string logLevelToAnsi(nix::Verbosity level);
-
-struct XilLogger : public nix::Logger
-{
-	void log(nix::Verbosity lvl, std::string_view msg) override;
-
-	void logEI(nix::ErrorInfo const &ei) override;
-
-	void result(nix::ActivityId act, nix::ResultType type, Fields const &fields) override;
-
-	void startActivity(
-		nix::ActivityId act,
-		nix::Verbosity lvl,
-		nix::ActivityType type,
-		std::string const &s,
-		Fields const &fields,
-		nix::ActivityId parent
-	) override;
-};
+#define ALIAS_FN(target_function) \
+	[]<typename ... Args>(Args &&...args) -> decltype(target_function(std::forward<Args>(args)...)) { \
+		return target_function(std::forward<Args>(args)...); \
+	}
 
 struct DerivationOutput
 {

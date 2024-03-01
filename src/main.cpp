@@ -2,25 +2,31 @@
 
 #include <algorithm>
 #include <cassert>
+#include <error.hh>
 #include <iostream>
 #include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
 #include <tuple>
+#include <type_traits>
 
 // Nix headers.
 #include <nix/config.h> // IWYU pragma: keep
+#include <nix/attrs.hh>
 #include <nix/attr-path.hh>
 #include <nix/attr-set.hh>
 #include <nix/canon-path.hh>
 #include <nix/eval.hh>
 #include <nix/eval-cache.hh>
 #include <nix/eval-settings.hh>
-#include <flake/flake.hh>
+#include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
+// LockedNode
+#include <nix/flake/lockfile.hh>
 #include <nix/input-accessor.hh>
 #include <nix/installable-flake.hh>
+#include <nix/loggers.hh>
 #include <nix/nixexpr.hh>
 #include <nix/outputs-spec.hh>
 #include <nix/path.hh>
@@ -31,14 +37,22 @@
 #include <nix/value.hh>
 
 #include <argparse/argparse.hpp>
+#include <boost/stacktrace.hpp>
 #include <fmt/core.h>
 #include <cppitertools/itertools.hpp>
 
 #include "nixcompat.h" // IWYU pragma: keep
 #include "attriter.hpp"
-#include "xil.hpp"
 #include "build.hpp"
+#include "flake.hpp"
+#include "logging.hh"
+#include "xil.hpp"
 #include "settings.hpp"
+
+namespace nix::fetchers
+{
+	extern std::vector<std::shared_ptr<nix::fetchers::InputScheme>> inputSchemes;
+}
 
 using fmt::print, fmt::println;
 using argparse::ArgumentParser;
@@ -55,7 +69,7 @@ nix::Value callPackage(nix::EvalState &state, nix::Value &targetValue)
 }
 
 nix::InstallableFlake parseInstallable(
-	nix::EvalState &state,
+	std::shared_ptr<nix::EvalState> state,
 	std::string const &installableSpec,
 	InstallableMode installableMode = InstallableMode::BUILD
 )
@@ -77,15 +91,10 @@ nix::InstallableFlake parseInstallable(
 	flags.updateLockFile = false;
 	flags.writeLockFile = false;
 
-	// We need to make a new nix::EvalState for this to be at all sound >.>
-	auto statePtr = nix::ref(std::make_shared<nix::EvalState>(
-		state.getSearchPath(),
-		state.store
-	));
 
 	auto installableFlake = nix::InstallableFlake(
 		nullptr,
-		statePtr,
+		nix::ref{state},
 		std::move(flakeRef),
 		fragment,
 		outputsSpec,
@@ -94,7 +103,6 @@ nix::InstallableFlake parseInstallable(
 		flags
 	);
 
-	eprintln("Returning installable {}", installableFlake.what());
 
 	return installableFlake;
 }
@@ -164,21 +172,21 @@ struct XilEvaluatorArgs
 	/** Gets the nix::Value from whichever of --expr, --file, and --flake was used.
 	Accordingly, this function may throw if the expression fails to evaluate.
 	*/
-	nix::Value getTargetValue(nix::EvalState &state, InstallableMode installableMode = InstallableMode::ALL) const
+	nix::Value getTargetValue(std::shared_ptr<nix::EvalState> state, InstallableMode installableMode = InstallableMode::ALL) const
 	{
 		nix::Expr *expr = nullptr;
 		nix::Value outValue;
 
 		if (auto const &exprStr = this->evalParser.present("--expr")) {
 			std::string const &str = exprStr.value();
-			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
-			state.eval(expr, outValue);
+			expr = state->parseExprFromString(str, state->rootPath(nix::CanonPath::fromCwd()));
+			state->eval(expr, outValue);
 
 		} else if (auto const &exprFile = this->evalParser.present("--file")) {
 			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
-			auto const file = state.rootPath(canonExprFilePath);
-			expr = state.parseExprFromFile(file);
-			state.eval(expr, outValue);
+			auto const file = state->rootPath(canonExprFilePath);
+			expr = state->parseExprFromFile(file);
+			state->eval(expr, outValue);
 
 		} else if (auto const &flakeSpec = this->evalParser.present("--flake")) {
 
@@ -189,61 +197,9 @@ struct XilEvaluatorArgs
 				installableMode
 			);
 
-			using nix::flake::LockedFlake;
-			using nix::flake::LockFlags;
+			LazyFlake lazyFlake{state, *dynamic_cast<XilLogger *>(nix::logger), std::move(instFlake)};
+			outValue = lazyFlake.installableValue(installableMode);
 
-			// First we need to lock the flake, or Nix will complain.
-			auto const lockedFlake = std::make_shared<LockedFlake>(
-				// FIXME: CLI does not allow changing lock flags.
-				nix::flake::lockFlake(state, instFlake.flakeRef, LockFlags{})
-			);
-
-			// We also can only do most things through the eval cache, so let's open that.
-			auto evalCache = nix::openEvalCache(state, lockedFlake);
-			auto attrCursor = evalCache->getRoot();
-			auto asValue = attrCursor->forceValue();
-
-			// Now let's work on the installable fragment part.
-			// For each possible attrpath the fragment could refer to,
-			// we'll check if it actually exists, and use it if it does.
-			bool found = false;
-			std::vector<std::string> const requestedAttrPaths = instFlake.getActualAttrPaths();
-			for (std::string const &requestedPath : requestedAttrPaths) {
-
-				// This is a bit of a hack.
-				if (requestedPath.empty()) {
-					found = true;
-					outValue = asValue;
-					break;
-				}
-
-				// Get the requested attr path from the installable fragment as Symbols,
-				// and then convert them to string_views.
-				auto const symToSv = [&](nix::Symbol const &sym) {
-					return static_cast<std::string_view>(state.symbols[sym]);
-				};
-				std::vector<nix::Symbol> const parsedAttrPath = nix::parseAttrPath(state, requestedPath);
-				auto const range = std::ranges::transform_view(parsedAttrPath, symToSv);
-				std::vector<std::string_view> attrPathParts{range.begin(), range.end()};
-
-				assert(asValue.type() == nix::nAttrs);
-
-				AttrIterable currentAttrs{asValue.attrs, state.symbols};
-				OptionalRef<nix::Attr> result = currentAttrs.find_by_nested_key(state, attrPathParts);
-				if (result.has_value()) {
-					found = true;
-					outValue = *result->get().value;
-				}
-			}
-
-			if (!found) {
-				auto msg = fmt::format(
-					"flake '{}' does not provide any of {}",
-					instFlake.what(),
-					fmt::join(requestedAttrPaths, ", ")
-				);
-				throw nix::EvalError(msg);
-			}
 		} else {
 			assert("unreachable" == nullptr);
 		}
@@ -289,12 +245,14 @@ struct XilArgs
 	ArgumentParser evalCmd;
 	ArgumentParser printCmd;
 	ArgumentParser buildCmd;
+	ArgumentParser fetchCmd;
 
 	XilArgs(int argc, char *argv[]) :
 		parser(ArgumentParser{"xil"}),
 		evalCmd(ArgumentParser{"eval"}),
 		printCmd(ArgumentParser{"print"}),
-		buildCmd(ArgumentParser{"build"})
+		buildCmd(ArgumentParser{"build"}),
+		fetchCmd(ArgumentParser{"fetch"})
 	{
 		this->parser.add_subparser(this->evalCmd);
 		this->evalCmd.add_description("Evaluate a Nix expression and print what it evaluates to");
@@ -309,6 +267,10 @@ struct XilArgs
 		this->parser.add_subparser(this->buildCmd);
 		this->buildCmd.add_description("Build the derivation evaluated from a Nix expression");
 		addExprArguments(this->buildCmd);
+
+		this->parser.add_subparser(this->fetchCmd);
+		this->fetchCmd.add_description("Fetch the specified flake");
+		this->fetchCmd.add_argument("installable");
 
 		this->parser.parse_args(argc, argv);
 	}
@@ -353,10 +315,17 @@ struct XilArgs
 
 int main(int argc, char *argv[])
 {
+	LOGFILE = std::make_shared<std::fstream>();
+	LOGFILE->exceptions(std::ios_base::badbit | std::ios_base::failbit);
+	LOGFILE->open("/home/qyriad/.local/var/log/xil.log", std::fstream::out | std::fstream::trunc);
+
 	XilArgs args(argc, argv);
 
 	nix::initNix();
 	nix::initGC();
+
+	auto xilLogger = new XilLogger{};
+	nix::logger = xilLogger;
 
 	//nix::EvalSettings &settings = nix::evalSettings;
 	// FIXME: log IFDs, rather than disallowing them.
@@ -384,7 +353,7 @@ int main(int argc, char *argv[])
 		nix::Value rootVal;
 
 		try {
-			rootVal = evalArgs.getTargetValue(*state);
+			rootVal = evalArgs.getTargetValue(state);
 			if (evalParser.get<bool>("--call-package") && rootVal.isLambda()) {
 				rootVal = callPackage(*state, rootVal);
 			}
@@ -419,7 +388,7 @@ int main(int argc, char *argv[])
 	} else if (args.parser.is_subcommand_used("build")) {
 		auto evalArgs = args.getEvalArgs().value();
 		try {
-			nix::Value rootVal = evalArgs.getTargetValue(*state, InstallableMode::BUILD);
+			nix::Value rootVal = evalArgs.getTargetValue(state, InstallableMode::BUILD);
 
 			if (args.buildCmd.get<bool>("--call-package")) {
 				rootVal = callPackage(*state, rootVal);
@@ -437,6 +406,94 @@ int main(int argc, char *argv[])
 			eprintln("{}", ex.msg());
 			return 3;
 		}
+	} else if (args.parser.is_subcommand_used("fetch")) {
+		auto installableSpec = args.fetchCmd.get<std::string>("installable");
+		//eprintln("installable is {}", installableSpec);
+
+		//using nix::flake::LockedFlake, nix::flake::LockFlags, nix::flake::LockedNode;
+		//using nix::fetchers::Input, nix::fetchers::InputScheme;
+
+		//nix::InstallableFlake instFlake = parseInstallable(
+		//	state,
+		//	installableSpec,
+		//	InstallableMode::BUILD
+		//);
+		//LazyFlake lazyFlake{state, *xilLogger, std::move(instFlake)};
+		LazyFlake lazyFlake{
+			state,
+			*xilLogger,
+			parseInstallable(state, installableSpec, InstallableMode::BUILD),
+		};
+
+		nix::flake::Node &root = *lazyFlake.locked().lockFile.root;
+		StdVec<nix::flake::LockedNode> allLockedNodes{};
+		//lockedFlake->flake.lockedRef.fetchTree(state->store);
+		collectFlakeNodes(allLockedNodes, root);
+		eprintln("The following flake store paths will be fetched for {}:", lazyFlake.fullStorePath());
+		for (auto const &node : allLockedNodes) {
+			auto const &rawStorePath = node.lockedRef.input.computeStorePath(*state->store);
+			auto const &storePath = state->store->printStorePath(rawStorePath);
+			eprintln("\t{} for {}", storePath, node.lockedRef.to_string());
+		}
+
+		for (auto const &node : allLockedNodes) {
+			xilLogger->withFetchLabel(node.originalRef.to_string(), [&] {
+				node.lockedRef.fetchTree(state->store);
+			});
+		}
+
+		//StdString flakeLabel{instFlake.flakeRef.to_string()};
+		//
+		//StdString resolveLabel{"Flake Registry"};
+		//nix::FlakeRef resolved = xilLogger->withFetchLabel(resolveLabel, [&]() -> nix::FlakeRef {
+		//	return instFlake.flakeRef.resolve(state->store);
+		//});
+		//
+		//LockFlags lockFlags{};
+		//lockFlags.updateLockFile = false;
+		//lockFlags.writeLockFile = false;
+		//
+		//Input &input = resolved.input;
+		//InputScheme &scheme = *input.scheme;
+		//xilLogger->withFetchLabel(flakeLabel, [&]() {
+		//	scheme.fetch(state->store, input);
+		//});
+		//
+		//auto lockedFlake = std::make_shared<LockedFlake>(
+		//	nix::flake::lockFlake(*state, instFlake.flakeRef, lockFlags)
+		//);
+		//nix::FlakeRef &lockedRef = lockedFlake->flake.lockedRef;
+		//
+		//xilLogger->log(nix::lvlInfo,
+		//	fmt::format("Locked flake as {}", lockedRef.to_string())
+		//);
+		//
+		//nix::flake::Node &root = *lockedFlake->lockFile.root;
+		//lockedFlake->flake.lockedRef.fetchTree(state->store);
+		//
+		//std::vector<LockedNode> allLockedNodes{};
+		//collectFlakeNodes(allLockedNodes, root);
+		//
+		//eprintln("The following flake store paths will be fetched:");
+		//for (auto const &node : allLockedNodes) {
+		//	auto rawStorePath = node.lockedRef.input.computeStorePath(*state->store);
+		//	auto storePath = state->store->printStorePath(rawStorePath);
+		//	auto label = node.lockedRef.to_string();
+		//	eprintln("\t{} for {}", storePath, label);
+		//}
+		//
+		//for (auto const &node : allLockedNodes) {
+		//	auto rawStorePath = node.lockedRef.input.computeStorePath(*state->store);
+		//	auto storePath = state->store->printStorePath(rawStorePath);
+		//	auto original = node.originalRef.to_string();
+		//	auto locked = node.lockedRef.to_string();
+		//	//eprintln("fetching: {} for {} ({})", storePath, original, locked);
+		//	//node.lockedRef.input.fetch(state->store);
+		//	xilLogger->withFetchLabel(node.originalRef.to_string(), [&]() {
+		//		node.lockedRef.fetchTree(state->store);
+		//		//input.fetch(state->store);
+		//	});
+		//}
 	}
 
 	return 0;

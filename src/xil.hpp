@@ -4,6 +4,7 @@
 
 #include <concepts>
 #include <functional>
+#include <fstream>
 #include <iostream>
 #include <iterator>
 #include <optional>
@@ -37,6 +38,9 @@ template <typename T, typename V, typename R>
 concept Callable = requires(T v, V foo) {
 	{ v(foo) -> R };
 };
+
+//extern std::ofstream LOGFILE;
+extern std::shared_ptr<std::fstream> LOGFILE;
 
 //template <
 //	//typenamet RangeT,
@@ -111,6 +115,23 @@ void eprintln(fmt::format_string<T ...> fmt, T && ...args)
 {
 	fmt::vprint(stderr, fmt, fmt::make_format_args(args ...));
 	eprint("\n");
+}
+
+template <typename ... T>
+void xlog(fmt::format_string<T ...> fmt, T && ...args)
+{
+	fmt::print(*LOGFILE, "xil: ");
+	fmt::vprint(*LOGFILE, fmt, fmt::make_format_args(args ...));
+	LOGFILE->flush();
+}
+
+template <typename ... T>
+void xlogln(fmt::format_string<T ...> fmt, T && ...args)
+{
+	fmt::print(*LOGFILE, "xil: ");
+	fmt::vprint(*LOGFILE, fmt, fmt::make_format_args(args ...));
+	fmt::print(*LOGFILE, "\n");
+	LOGFILE->flush();
 }
 
 template <>
@@ -346,7 +367,10 @@ struct InstallableMode
 	constexpr InstallableMode(Value v) : inner(v) { }
 
 	// This will make switch case "just work".
-	constexpr operator Value() const noexcept;
+	constexpr operator Value() const noexcept
+	{
+		return this->inner;
+	}
 
 	// And this is to remove the transitive boolean coercion added by the
 	// above conversion operator.

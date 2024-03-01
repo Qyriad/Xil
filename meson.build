@@ -6,10 +6,16 @@ project(
     # Normally I would add prefer_static=true, but Nix is one of the few places
     # where it doesn't make sense to statically link =P
     'buildtype=debugoptimized',
-    'b_lto=true',
     'warning_level=2',
   ],
 )
+
+cxx = meson.get_compiler('cpp')
+cxx_args = []
+# LTO seems to be broken in Clang under Nix right now.
+if cxx.get_id().contains('gcc')
+  cxx_args += '-flto=auto'
+endif
 
 dep_names = [
   'fmt',
@@ -26,6 +32,12 @@ deps = []
 foreach dep_name : dep_names
   deps += dependency(dep_name, include_type : 'system')
 endforeach
+
+nix_fetchers = cxx.find_library(
+  'nixfetchers',
+  required : true,
+)
+deps += nix_fetchers
 
 settings_conf = configuration_data()
 # Make xillib_dir absolute if it wasn't already.
@@ -52,6 +64,8 @@ srcs = [
   'src/xil.cpp',
   'src/attriter.cpp',
   'src/build.cpp',
+  'src/flake.cpp',
+  'src/logging.cpp',
 ]
 
-executable('xil', srcs, dependencies : deps, install : true)
+executable('xil', srcs, cpp_args : cxx_args, dependencies : deps, install : true)

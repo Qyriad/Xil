@@ -1,6 +1,8 @@
 #include "xil.hpp"
 
 #include <iterator>
+#include <fstream>
+#include <memory>
 
 // Nix headers.
 #include <nix/nixexpr.hh>
@@ -14,6 +16,10 @@
 #include "nixcompat.h"
 
 using namespace std::literals::string_literals;
+
+std::shared_ptr<std::fstream> LOGFILE = nullptr;
+//std::ofstream LOGFILE{"/home/qyriad/.local/var/log/xil/xil.log"};
+//std::shared_ptr<std::ofstream> LOGFILE;
 
 std::string_view nix::format_as(nix::ValueType const type) noexcept
 {
@@ -558,10 +564,10 @@ OptString Printer::safeForce(nix::Value &value, nix::PosIdx position)
 	return std::nullopt;
 }
 
-constexpr InstallableMode::operator InstallableMode::Value() const noexcept
-{
-	return this->inner;
-}
+//constexpr InstallableMode::operator InstallableMode::Value() const noexcept
+//{
+//	return this->inner;
+//}
 
 std::list<std::string> InstallableMode::defaultFlakeAttrPaths(std::string_view const system) const
 {
