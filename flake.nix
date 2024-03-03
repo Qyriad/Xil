@@ -26,6 +26,7 @@
       packages = {
         default = xil;
         unstable = xilForNixUnstable;
+        inherit xil;
       };
       devShells.default = pkgs.callPackage xil.mkShell { };
       checks = self.outputs.packages.${system};
