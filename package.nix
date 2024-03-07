@@ -93,22 +93,22 @@ stdenv.mkDerivation (self: {
         let
           nixpkgs = builtins.getFlake "nixpkgs";
           pkgs = import nixpkgs { };
+          callPackage = import <xil/cleanCallPackageWith> pkgs;
         in
-          target: pkgs.callPackage target { }
+          target: callPackage target { }
       '';
 
     in {
       callPackageString ? default.callPackageString,
-    }:
-      self.overrideAttrs (prev: {
-        # We have to use preConfigure instead of `mesonFlags` directly, because `mesonFlags` can't have args
-        # with spaces >.>
-        preConfigure = (prev.preConfigure or "") + ''
-          mesonFlagsArray+=(
-            "-Dcallpackage_fun=${trimAndEscape callPackageString}"
-          )
-        '';
-      });
+    }: self.overrideAttrs (prev: {
+      # We have to use preConfigure instead of `mesonFlags` directly, because `mesonFlags` can't have args
+      # with spaces >.>
+      preConfigure = (prev.preConfigure or "") + ''
+        mesonFlagsArray+=(
+          "-Dcallpackage_fun=${trimAndEscape callPackageString}"
+        )
+      '';
+    }); # withConfig
 
     mkShell = {
       mkShell,

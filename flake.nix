@@ -32,5 +32,5 @@
       checks = self.outputs.packages.${system};
     }) # eachDefaultSystem
 
-  ;# outputs
+  ; # outputs
 }

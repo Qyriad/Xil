@@ -1,6 +1,14 @@
 # vim: filetype=meson
 option('callpackage_fun', type : 'string',
-  value : 'target: (import <nixpkgs> { }).callPackage target { }',
+  # Meson options can't be multiline, the C string can't contain literal quotes, and I can't call functions
+  # or use variables in meson.options. Oh boy! So yeah that's why this looks like this.
+  # More readably formatted:
+  # let
+  #   nixpkgs = builtins.getFlake "nixpkgs";
+  #   pkgs = import nixpkgs { };
+  #   callPackage = import <xil/cleanCallPackageWith> pkgs;
+  # in target: callPackage target { }
+  value : 'let nixpkgs = builtins.getFlake \\x22nixpkgs\\x22; pkgs = import nixpkgs { }; callPackage = import <xil/cleanCallPackageWith> pkgs; in target: callPackage target { }',
   description : 'The Nix expression to use for --call-package',
 )
 option('xillib_dir', type : 'string',
