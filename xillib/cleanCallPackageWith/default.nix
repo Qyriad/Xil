@@ -54,10 +54,18 @@ autoArgs: fn: specifiedArgs: let
     lib.optionalString (suggestions != [ ]) ", did you mean ${concatenated}";
 
   errorForArgName = arg: let
+
     loc = builtins.unsafeGetAttrPos arg fargs;
-    loc' = if loc != null then loc.file + ":" + toString loc.line
+    loc' =
+      if loc != null then
+        "${loc.file}:${toString loc.line}"
       else if ! lib.isFunction fn then
-        toString fn + lib.optionalString (lib.pathIsDirectory fn) "/default.nix"
+        let
+          importArg = toString fn;
+          # Importing a directory actually imports $directory/default.nix
+          importedFile = importArg lib.optionalString (lib.pathIsDirectory fn) "/default.nix";
+        in
+          importedFile
       else "<unknown location>";
 
     # Will be an empty string if there are no suggestions,
