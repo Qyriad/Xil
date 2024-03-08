@@ -367,12 +367,7 @@ int main(int argc, char *argv[])
 
 	// FIXME: allow specifying SearchPath from command line.
 	auto xilEl = nix::SearchPath::Elem::parse(fmt::format("xil={}", XILLIB_DIR));
-	nix::SearchPath searchPath;
-	if (args.parser.is_subcommand_used(args.printCmd)) {
-		searchPath = nix::SearchPath{std::list<nix::SearchPath::Elem>{xilEl}};
-	} else {
-		searchPath = nix::SearchPath{};
-	}
+	nix::SearchPath searchPath{std::list<nix::SearchPath::Elem>{xilEl}};
 	auto state = std::make_shared<nix::EvalState>(searchPath, store, store);
 
 	// Handle eval and print commands.
