@@ -8,18 +8,21 @@
 #include <attr-set.hh>
 #include <value.hh>
 
+#include "std/string.hpp"
+#include "std/string_view.hpp"
+#include "std/vector.hpp"
 #include "xil.hpp"
 
 struct AttrKeyValueIter
 {
 	using iterator_category = std::forward_iterator_tag;
 	using difference_type = ptrdiff_t;
-	using value_type = std::tuple<std::string const, nix::Value> const;
-	using pointer = std::tuple<std::string const, nix::Value *> const;
-	using reference = std::tuple<std::string const &, nix::Value &> const;
+	using value_type = std::tuple<StdString const, nix::Value> const;
+	using pointer = std::tuple<StdString const, nix::Value *> const;
+	using reference = std::tuple<StdString const &, nix::Value &> const;
 
 	// Cursed.
-	std::vector<std::string> mutable referredNames;
+	StdVec<StdString> mutable referredNames;
 
 	// Pointer means we have to define operator= ourself.
 	nix::Attr *current;
@@ -84,6 +87,6 @@ struct AttrIterable
 
 	bool empty() const;
 
-	OptionalRef<nix::Attr> find_by_key(std::string_view const needle);
-	OptionalRef<nix::Attr> find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec);
+	OptionalRef<nix::Attr> find_by_key(StdStr const needle);
+	OptionalRef<nix::Attr> find_by_nested_key(nix::EvalState &state, std::span<StdStr> needleSpec);
 };

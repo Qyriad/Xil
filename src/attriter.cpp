@@ -7,7 +7,7 @@
 
 AttrKeyValueIter::reference AttrKeyValueIter::operator*() const
 {
-	std::string const name = (*this->symbols)[this->current->name];
+	StdString const name = (*this->symbols)[this->current->name];
 	// We need a persistent reference, so keep this string alive in this class's vector.
 	this->referredNames.push_back(name);
 	nix::Value &value = *this->current->value;
@@ -16,7 +16,7 @@ AttrKeyValueIter::reference AttrKeyValueIter::operator*() const
 
 AttrKeyValueIter::pointer AttrKeyValueIter::operator->()
 {
-	std::string const name = (*this->symbols)[this->current->name];
+	StdString const name = (*this->symbols)[this->current->name];
 	// We need a persistent reference, so keep this string alive in this class's vector.
 	this->referredNames.push_back(name);
 	nix::Value *value = this->current->value;
@@ -71,10 +71,10 @@ bool operator!=(AttrKeyValueIter const &lhs, AttrKeyValueIter const &rhs) noexce
 	return lhs.current != rhs.current;
 }
 
-OptionalRef<nix::Attr> AttrIterable::find_by_key(std::string_view needle)
+OptionalRef<nix::Attr> AttrIterable::find_by_key(StdStr needle)
 {
 	for (auto &attr : *this->attrs) {
-		auto name = static_cast<std::string_view>(this->symbols[attr.name]);
+		auto name = static_cast<StdStr>(this->symbols[attr.name]);
 		if (name == needle) {
 			return std::make_optional(std::ref(attr));
 		}
@@ -83,7 +83,7 @@ OptionalRef<nix::Attr> AttrIterable::find_by_key(std::string_view needle)
 	return std::nullopt;
 }
 
-OptionalRef<nix::Attr> AttrIterable::find_by_nested_key(nix::EvalState &state, std::span<std::string_view> needleSpec)
+OptionalRef<nix::Attr> AttrIterable::find_by_nested_key(nix::EvalState &state, std::span<StdStr> needleSpec)
 {
 	if (needleSpec.empty()) {
 		return std::nullopt;
@@ -95,7 +95,7 @@ OptionalRef<nix::Attr> AttrIterable::find_by_nested_key(nix::EvalState &state, s
 		return std::nullopt;
 	}
 
-	std::span<std::string_view> rest = needleSpec.subspan(1);
+	std::span<StdStr> rest = needleSpec.subspan(1);
 
 	// If we don't have any more attrs to recurse into, then this is The One.
 	if (rest.empty()) {

@@ -3,9 +3,6 @@
 #include <cassert>
 #include <functional>
 #include <memory>
-#include <string>
-#include <string_view>
-#include <vector>
 
 // Nix headers.
 #include <nix/config.h> // IWYU pragma: keep
@@ -37,11 +34,15 @@
 #include <fmt/core.h>
 #include <fmt/format.h>
 
+#include "std/string.hpp"
+#include "std/string_view.hpp"
+#include "std/vector.hpp"
+
 using namespace std::literals::string_literals;
 
 namespace nix
 {
-	std::string_view format_as(nix::StorePath const path) noexcept;
+	StdStr format_as(nix::StorePath const path) noexcept;
 }
 
 #define STRINGIFY__(a) #a
@@ -50,7 +51,7 @@ namespace nix
 
 struct AnsiFg
 {
-	using Sv = std::string_view;
+	using Sv = StdStr;
 	constexpr static Sv RESET   = SGR8(0);
 	constexpr static Sv BOLD    = SGR8(1);
 	constexpr static Sv FAINT   = SGR8(2);
@@ -70,10 +71,10 @@ struct AnsiFg
 #undef STRINGIFY__
 
 /** Wraps a string in an ANSI color, adding the RESET code at the end. */
-std::string wrapInColor(std::string_view stringToWrap, std::string_view ansiColor);
+StdString wrapInColor(StdStr stringToWrap, StdStr ansiColor);
 
 template <typename Range>
-std::string wrapInColorAndJoin(Range &&range, std::string_view separator, std::string_view ansiColor)
+StdString wrapInColorAndJoin(Range &&range, StdStr separator, StdStr ansiColor)
 {
 	return fmt::format("{}{}{}",
 		ansiColor,
@@ -82,15 +83,15 @@ std::string wrapInColorAndJoin(Range &&range, std::string_view separator, std::s
 	);
 }
 
-std::string logLevelToAnsiColor(nix::Verbosity level);
+StdString logLevelToAnsiColor(nix::Verbosity level);
 
-std::string logLevelName(nix::Verbosity level);
+StdString logLevelName(nix::Verbosity level);
 
-std::string logLevelToAnsi(nix::Verbosity level);
+StdString logLevelToAnsi(nix::Verbosity level);
 
 struct XilLogger : public nix::Logger
 {
-	void log(nix::Verbosity lvl, std::string_view msg) override;
+	void log(nix::Verbosity lvl, StdStr msg) override;
 
 	void logEI(nix::ErrorInfo const &ei) override;
 
@@ -100,7 +101,7 @@ struct XilLogger : public nix::Logger
 		nix::ActivityId act,
 		nix::Verbosity lvl,
 		nix::ActivityType type,
-		std::string const &s,
+		StdString const &s,
 		Fields const &fields,
 		nix::ActivityId parent
 	) override;
@@ -108,17 +109,17 @@ struct XilLogger : public nix::Logger
 
 struct DerivationOutput
 {
-	std::string outputName;
+	StdString outputName;
 	nix::StorePath outPath;
 	nix::DerivedPath derivedPath;
 };
 
-std::string_view format_as(DerivationOutput const output);
+StdStr format_as(DerivationOutput const output);
 
 /** All the information you could want about a derivation, in one place. …Hopefully. */
 struct DerivationMeta
 {
-	std::vector<DerivationOutput> outputs;
+	StdVec<DerivationOutput> outputs;
 	nix::DrvInfo drvInfo;
 	nix::StorePath drvPath;
 
@@ -141,10 +142,10 @@ struct DerivationMeta
 		}
 	}
 
-	std::vector<std::reference_wrapper<nix::StorePath>> outPaths();
-	std::vector<std::string> fullOutPaths(nix::Store const &store);
+	StdVec<std::reference_wrapper<nix::StorePath>> outPaths();
+	StdVec<StdString> fullOutPaths(nix::Store const &store);
 
-	std::vector<nix::DerivedPath> derivedPaths();
+	StdVec<nix::DerivedPath> derivedPaths();
 };
 
 struct DrvBuilder

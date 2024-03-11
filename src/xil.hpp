@@ -6,10 +6,7 @@
 #include <functional>
 #include <iostream>
 #include <iterator>
-#include <optional>
 #include <source_location>
-#include <string>
-#include <string_view>
 #include <stdexcept>
 #include <type_traits>
 
@@ -23,6 +20,11 @@
 #include <fmt/core.h>
 #include <fmt/ostream.h>
 
+#include "std/list.hpp"
+#include "std/optional.hpp"
+#include "std/string.hpp"
+#include "std/string_view.hpp"
+#include "std/vector.hpp"
 #include "settings.hpp"
 
 #define RANGE(a) a.begin(), a.end()
@@ -77,25 +79,24 @@ struct Ext
 };
 
 template <typename T>
-struct Ext<std::vector<T>>
+struct Ext<StdVec<T>>
 {
-	//using Self = std::vector<T>;
-	std::vector<T> &&self;
+	StdVec<T> &&self;
 
-	Ext(std::vector<T> &&self) : self(self) { }
+	Ext(StdVec<T> &&self) : self(self) { }
 
 	template <typename FromRangeT, typename FromIterT = FromRangeT::iterator>
-	static std::vector<T> from(FromRangeT &&range)
+	static StdVec<T> from(FromRangeT &&range)
 	{
 		FromIterT begin = range.begin();
 		FromIterT end = range.end();
-		return std::vector<T>{begin, end};
+		return StdVec<T>{begin, end};
 	}
 };
 
 namespace nix
 {
-	std::string_view format_as(nix::ValueType const type) noexcept;
+	StdStr format_as(nix::ValueType const type) noexcept;
 }
 
 // Exactly like fmt::print, but prints to stderr.
@@ -121,16 +122,16 @@ concept ArithmeticT = std::is_arithmetic<T>::value;
 
 /** Naïvely pluralize an english noun if the specified number is not 1. Otherwise return the as-is. */
 template <ArithmeticT T>
-std::string maybePluralize(T numberOfThings, std::string_view baseNoun, std::string_view suffix = "s")
+StdString maybePluralize(T numberOfThings, StdStr baseNoun, StdStr suffix = "s")
 {
 	if (numberOfThings == 1) {
-		return std::string(baseNoun);
+		return StdString(baseNoun);
 	}
 	return fmt::format("{}{}", baseNoun, suffix);
 }
 
-using OptString = std::optional<std::string>;
-using OptStringView = std::optional<std::string_view>;
+using OptString = StdOpt<StdString>;
+using OptStringView = StdOpt<StdStr>;
 
 #define TYPENAME(expr) (boost::core::demangle(typeid(expr).name()))
 
@@ -146,7 +147,7 @@ size_t const EXPR_STRING = typeid(nix::ExprString).hash_code();
 // FIXME: more
 
 #define HANDLER(kind_constant, kind_type, lambda) { \
-	kind_constant, [&](nix::Expr &rawExpr) -> std::optional<std::string> { \
+	kind_constant, [&](nix::Expr &rawExpr) -> StdOpt<StdString> { \
 		auto &expr = dynamic_cast<kind_type>(rawExpr); \
 		return lambda(expr); \
 	} \
@@ -219,7 +220,7 @@ requires requires (RangeT range) {
 	range.begin();
 	range.end();
 }
-auto iterToVec(RangeT &&range) -> std::vector<typename decltype(range.begin())::value_type>
+auto iterToVec(RangeT &&range) -> StdVec<typename decltype(range.begin())::value_type>
 {
 	// Calls vector's "from range" constructor (containers.sequences.vectors.cons/9).
 	return std::vector{range.begin(), range.end()};
@@ -237,12 +238,12 @@ struct ToVec
 	ToVec(RangeT &&range) : begin(range.begin()), end(range.end()) { }
 
 	template <typename ValueT>
-	operator std::vector<ValueT>() const
+	operator StdVec<ValueT>() const
 	{
 		return std::vector{this->begin, this->end()};
 	}
 
-	operator std::vector<value_type>() const
+	operator StdVec<value_type>() const
 	{
 		return std::vector{this->begin(), this->end()};
 	}
@@ -282,17 +283,17 @@ struct Printer
 		state(state), safe(safe), shortErrors(shortErrors), shortDerivations(shortDerivations)
 	{ }
 
-	// Gets a std::string for a nix::Symbol, checking if the Symbol is invalid first.
+	// Gets a StdString for a nix::Symbol, checking if the Symbol is invalid first.
 	OptString symbolStr(nix::Symbol &symbol);
 
-	// Gets a std::string_view for a nix::Symbol.
+	// Gets a StdStr for a nix::Symbol.
 	// TODO: Is this...safe?
 	OptStringView symbolStrView(nix::Symbol &symbol);
 
 	// Gets a nix::SymbolStr for a nix::Symbol, checking if the Symbol is invalid first.
-	std::optional<nix::SymbolStr> symbol(nix::Symbol &&symbol);
+	StdOpt<nix::SymbolStr> symbol(nix::Symbol &&symbol);
 
-	nix::Value *getAttrValue(nix::Bindings *attrs, std::string_view key);
+	nix::Value *getAttrValue(nix::Bindings *attrs, StdStr key);
 	nix::Value *getAttrValue(nix::Bindings *attrs, nix::Symbol key);
 
 	// Gets the name associated with an expression, if applicable.
@@ -352,12 +353,12 @@ struct InstallableMode
 	// above conversion operator.
 	explicit operator bool() = delete;
 
-	std::list<std::string> defaultFlakeAttrPaths(std::string_view const system) const;
-	std::list<std::string> defaultFlakeAttrPrefixes(std::string_view const system) const;
+	StdList<StdString> defaultFlakeAttrPaths(StdStr const system) const;
+	StdList<StdString> defaultFlakeAttrPrefixes(StdStr const system) const;
 };
 
 template <typename T>
-std::optional<T *> make_optional_ptr(T *v)
+StdOpt<T *> make_optional_ptr(T *v)
 {
 	if (v == nullptr) {
 		return std::nullopt;
@@ -367,7 +368,7 @@ std::optional<T *> make_optional_ptr(T *v)
 
 // std::optional with a std::reference_wrapper
 template <typename T>
-using OptionalRef = std::optional<std::reference_wrapper<T>>;
+using OptionalRef = StdOpt<std::reference_wrapper<T>>;
 
 // A combination of std::make_optional() and std::ref()
 template <typename T>

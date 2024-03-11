@@ -15,7 +15,7 @@
 
 using namespace std::literals::string_literals;
 
-std::string_view nix::format_as(nix::ValueType const type) noexcept
+StdStr nix::format_as(nix::ValueType const type) noexcept
 {
 	switch (type) {
 		case nix::nThunk:
@@ -46,9 +46,9 @@ std::string_view nix::format_as(nix::ValueType const type) noexcept
 }
 
 /** Attempts to get the error message itself (without traces) from a Nix error string. */
-OptStringView stringErrorLine(std::string_view sv)
+OptStringView stringErrorLine(StdStr sv)
 {
-	std::string_view const searchingFor = "error:\x1b[0m";
+	StdStr const searchingFor = "error:\x1b[0m";
 	auto errorStart = sv.rfind(searchingFor);
 	if (errorStart == decltype(sv)::npos) {
 		return std::nullopt;
@@ -76,7 +76,7 @@ OptString Printer::symbolStr(nix::Symbol &symbol)
 		return std::nullopt;
 	}
 
-	return static_cast<std::string>(this->state->symbols[symbol]);
+	return static_cast<StdString>(this->state->symbols[symbol]);
 }
 
 OptStringView Printer::symbolStrView(nix::Symbol &symbol)
@@ -85,7 +85,7 @@ OptStringView Printer::symbolStrView(nix::Symbol &symbol)
 		return std::nullopt;
 	}
 
-	return static_cast<std::string_view>(this->state->symbols[symbol]);
+	return static_cast<StdStr>(this->state->symbols[symbol]);
 }
 
 nix::Value *Printer::getAttrValue(nix::Bindings *attrs, nix::Symbol key)
@@ -99,7 +99,7 @@ nix::Value *Printer::getAttrValue(nix::Bindings *attrs, nix::Symbol key)
 	return found->value;
 }
 
-nix::Value *Printer::getAttrValue(nix::Bindings *attrs, std::string_view key)
+nix::Value *Printer::getAttrValue(nix::Bindings *attrs, StdStr key)
 {
 	// FIXME: does this...work?
 	for (auto &&attr : *attrs) {
@@ -201,7 +201,7 @@ std::ostream &operator<<(std::ostream &out, Indent const &self)
 }
 
 // A formatter for fmt::format().
-std::string format_as(Indent const indentation)
+StdString format_as(Indent const indentation)
 {
 	std::stringstream ss;
 	printIndent(ss, indentation.level);
@@ -209,7 +209,7 @@ std::string format_as(Indent const indentation)
 }
 
 // Prints single-line strings in quotes, and multiline strings as a '' string, formatted nicely.
-std::string prettyString(std::string_view nixString, uint32_t indentLevel)
+StdString prettyString(StdStr nixString, uint32_t indentLevel)
 {
 	// TODO: this, or std::stringstream?
 	auto buffer = fmt::memory_buffer();
@@ -302,7 +302,7 @@ void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t inden
 	auto typeIsPkgs = std::find_if(
 		attrIter.begin(),
 		attrIter.end(),
-		[](std::tuple<std::string_view const, nix::Value const &> pair) -> bool {
+		[](std::tuple<StdStr const, nix::Value const &> pair) -> bool {
 			auto const &[name, value] = pair;
 			return name == "_type" && value.type() == nix::nString && nixValueSv(value) == "pkgs"s;
 		}
@@ -492,7 +492,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 
 void Printer::printRepeatedAttrs(nix::Bindings *attrs, std::ostream &out)
 {
-	std::vector<std::string> firstFewNames;
+	StdVec<StdString> firstFewNames;
 	for (auto const &[innerName, innerValue] : AttrIterable(attrs, this->state->symbols)) {
 		firstFewNames.push_back(innerName);
 		// FIXME: make configurable.
@@ -563,37 +563,37 @@ constexpr InstallableMode::operator InstallableMode::Value() const noexcept
 	return this->inner;
 }
 
-std::list<std::string> InstallableMode::defaultFlakeAttrPaths(std::string_view const system) const
+StdList<StdString> InstallableMode::defaultFlakeAttrPaths(StdStr const system) const
 {
 	switch (*this) {
 		case NONE:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				"",
 			};
 		case BUILD:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("packages.{}.default", system),
 				fmt::format("defaultPackage.{}", system),
 				fmt::format("legacyPackages.{}.default", system),
 			};
 		case DEVSHELL:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("devShells.{}.default", system),
 			};
 		case APP:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("apps.{}.default", system),
 				fmt::format("packages.{}.default", system),
 				fmt::format("defaultPackage.{}", system),
 				fmt::format("legacyPackages.{}.default", system),
 			};
 		case CHECKS:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("checks.{}.default", system),
 				fmt::format("{}.defaultCheck", system),
 			};
 		case ALL:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format(""),
 				fmt::format("."),
 				fmt::format(".default"),
@@ -611,34 +611,34 @@ std::list<std::string> InstallableMode::defaultFlakeAttrPaths(std::string_view c
 	}
 }
 
-std::list<std::string> InstallableMode::defaultFlakeAttrPrefixes(std::string_view const system) const
+StdList<StdString> InstallableMode::defaultFlakeAttrPrefixes(StdStr const system) const
 {
 	switch (*this) {
 		case NONE:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				"",
 			};
 		case BUILD:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("packages.{}.", system),
 				fmt::format("legacyPackages.{}.", system),
 			};
 		case DEVSHELL:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("devShells.{}.", system),
 			};
 		case APP:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("apps.{}.", system),
 				fmt::format("packages.{}.", system),
 				fmt::format("legacyPackages.{}.", system),
 			};
 		case CHECKS:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format("checks.{}.", system),
 			};
 		case ALL:
-			return std::list<std::string>{
+			return StdList<StdString>{
 				fmt::format(""),
 				fmt::format("{}.", system),
 				fmt::format("packages.{}.", system),

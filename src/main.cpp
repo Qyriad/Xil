@@ -1,13 +1,8 @@
 // vim: tabstop=4 shiftwidth=4 noexpandtab
 
-#include <algorithm>
 #include <cassert>
 #include <iostream>
-#include <iterator>
 #include <memory>
-#include <optional>
-#include <string>
-#include <tuple>
 
 // Nix headers.
 #include <nix/config.h> // IWYU pragma: keep
@@ -17,7 +12,7 @@
 #include <nix/eval.hh>
 #include <nix/eval-cache.hh>
 #include <nix/eval-settings.hh>
-#include <flake/flake.hh>
+#include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/input-accessor.hh>
 #include <nix/installable-flake.hh>
@@ -33,6 +28,12 @@
 #include <argparse/argparse.hpp>
 #include <fmt/core.h>
 #include <cppitertools/itertools.hpp>
+
+#include "std/list.hpp"
+#include "std/optional.hpp"
+#include "std/string.hpp"
+#include "std/string_view.hpp"
+#include "std/vector.hpp"
 
 #include "nixcompat.h" // IWYU pragma: keep
 #include "attriter.hpp"
@@ -56,14 +57,14 @@ nix::Value callPackage(nix::EvalState &state, nix::Value &targetValue)
 
 nix::InstallableFlake parseInstallable(
 	nix::EvalState &state,
-	std::string const &installableSpec,
+	StdString const &installableSpec,
 	InstallableMode installableMode = InstallableMode::BUILD
 )
 {
 	auto [fragmentedFlakeRef, outputsSpec] = nix::ExtendedOutputsSpec::parse(installableSpec);
 
 	auto [flakeRef, fragment] = nix::parseFlakeRefWithFragment(
-		std::string(fragmentedFlakeRef),
+		StdString(fragmentedFlakeRef),
 		nix::CanonPath::fromCwd().c_str()
 	);
 
@@ -170,7 +171,7 @@ struct XilEvaluatorArgs
 		nix::Value outValue;
 
 		if (auto const &exprStr = this->evalParser.present("--expr")) {
-			std::string const &str = exprStr.value();
+			StdString const &str = exprStr.value();
 			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
 			state.eval(expr, outValue);
 
@@ -207,8 +208,8 @@ struct XilEvaluatorArgs
 			// For each possible attrpath the fragment could refer to,
 			// we'll check if it actually exists, and use it if it does.
 			bool found = false;
-			std::vector<std::string> const requestedAttrPaths = instFlake.getActualAttrPaths();
-			for (std::string const &requestedPath : requestedAttrPaths) {
+			StdVec<StdString> const requestedAttrPaths = instFlake.getActualAttrPaths();
+			for (StdString const &requestedPath : requestedAttrPaths) {
 
 				// This is a bit of a hack.
 				if (requestedPath.empty()) {
@@ -220,11 +221,11 @@ struct XilEvaluatorArgs
 				// Get the requested attr path from the installable fragment as Symbols,
 				// and then convert them to string_views.
 				auto const symToSv = [&](nix::Symbol const &sym) {
-					return static_cast<std::string_view>(state.symbols[sym]);
+					return static_cast<StdStr>(state.symbols[sym]);
 				};
-				std::vector<nix::Symbol> const parsedAttrPath = nix::parseAttrPath(state, requestedPath);
+				StdVec<nix::Symbol> const parsedAttrPath = nix::parseAttrPath(state, requestedPath);
 				auto const range = std::ranges::transform_view(parsedAttrPath, symToSv);
-				std::vector<std::string_view> attrPathParts{range.begin(), range.end()};
+				StdVec<StdStr> attrPathParts{range.begin(), range.end()};
 
 				assert(asValue.type() == nix::nAttrs);
 
@@ -314,7 +315,7 @@ struct XilArgs
 	}
 
 	/** Gets the XilArgs, if any, for `eval` or `print`, whichever is used. */
-	std::optional<XilPrinterArgs> getPrinterArgs() noexcept
+	StdOpt<XilPrinterArgs> getPrinterArgs() noexcept
 	{
 		if (this->parser.is_subcommand_used(this->evalCmd)) {
 			return XilPrinterArgs{
@@ -336,7 +337,7 @@ struct XilArgs
 	}
 
 	/** Gets the XilEvaluatorArgs, if any, for `eval`, `print`, or `build`, whichever is used. */
-	std::optional<XilEvaluatorArgs> getEvalArgs() noexcept
+	StdOpt<XilEvaluatorArgs> getEvalArgs() noexcept
 	{
 		if (this->parser.is_subcommand_used(this->evalCmd) || this->parser.is_subcommand_used(this->printCmd)) {
 			return this->getPrinterArgs();
@@ -388,7 +389,7 @@ int main(int argc, char *argv[])
 			return 1;
 		}
 
-		auto const &shortDrvsOpt = evalParser.get<std::string>("--short-derivations");
+		auto const &shortDrvsOpt = evalParser.get<StdString>("--short-derivations");
 		// As far as `Printer` is concerned, "auto" is equivalent to "always".
 		// If it's "auto", then we'll manually check for a top-level derivation attrset.
 		bool const shortDrvs = (shortDrvsOpt == "always") || (shortDrvsOpt == "auto");

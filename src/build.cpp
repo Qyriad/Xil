@@ -18,19 +18,19 @@
 
 namespace stdfs = std::filesystem;
 
-std::string_view nix::format_as(nix::StorePath const path) noexcept
+StdStr nix::format_as(nix::StorePath const path) noexcept
 {
 	return path.to_string();
 }
 
-std::string wrapInColor(std::string_view stringToWrap, std::string_view ansiColor)
+StdString wrapInColor(StdStr stringToWrap, StdStr ansiColor)
 {
 	return fmt::format("{}{}{}", ansiColor, stringToWrap, AnsiFg::RESET);
 }
 
-std::string logLevelToAnsiColor(nix::Verbosity level)
+StdString logLevelToAnsiColor(nix::Verbosity level)
 {
-	using S = std::string;
+	using S = StdString;
 	switch (level) {
 		case nix::lvlError:
 			return S(AnsiFg::RED);
@@ -53,7 +53,7 @@ std::string logLevelToAnsiColor(nix::Verbosity level)
 	}
 }
 
-std::string logLevelName(nix::Verbosity level)
+StdString logLevelName(nix::Verbosity level)
 {
 	switch (level) {
 		case nix::lvlError:
@@ -77,14 +77,14 @@ std::string logLevelName(nix::Verbosity level)
 	}
 }
 
-std::string logLevelToAnsi(nix::Verbosity level)
+StdString logLevelToAnsi(nix::Verbosity level)
 {
 	auto nameLower = logLevelName(level);
 	auto nameUpper = boost::algorithm::to_upper_copy(nameLower);
 	return fmt::format("{}:: {}", logLevelToAnsiColor(level), AnsiFg::RESET);
 }
 
-void XilLogger::log(nix::Verbosity lvl, std::string_view msg)
+void XilLogger::log(nix::Verbosity lvl, StdStr msg)
 {
 	// FIXME: make configurable!
 	if (lvl <= nix::Verbosity::lvlInfo) {
@@ -122,7 +122,7 @@ void XilLogger::startActivity(
 	[[maybe_unused]] nix::ActivityId act,
 	nix::Verbosity lvl,
 	[[maybe_unused]] nix::ActivityType type,
-	std::string const &s,
+	StdString const &s,
 	[[maybe_unused]] Fields const &fields,
 	[[maybe_unused]] nix::ActivityId parent
 )
@@ -135,14 +135,14 @@ void XilLogger::startActivity(
 	}
 }
 
-std::string_view format_as(DerivationOutput const output)
+StdStr format_as(DerivationOutput const output)
 {
 	return output.outPath.to_string();
 }
 
-std::vector<std::reference_wrapper<nix::StorePath>> DerivationMeta::outPaths()
+StdVec<std::reference_wrapper<nix::StorePath>> DerivationMeta::outPaths()
 {
-	std::vector<std::reference_wrapper<nix::StorePath>> res;
+	StdVec<std::reference_wrapper<nix::StorePath>> res;
 	for (auto &derivationOutput : this->outputs) {
 		res.push_back(derivationOutput.outPath);
 	}
@@ -150,16 +150,16 @@ std::vector<std::reference_wrapper<nix::StorePath>> DerivationMeta::outPaths()
 	return res;
 }
 
-std::vector<std::string> DerivationMeta::fullOutPaths(nix::Store const &store)
+StdVec<StdString> DerivationMeta::fullOutPaths(nix::Store const &store)
 {
-	std::vector<std::string> res;
+	StdVec<StdString> res;
 	for (auto const &derivationOutput : this->outputs) {
 		res.push_back(store.printStorePath(derivationOutput.outPath));
 	}
 	return res;
 }
 
-std::vector<nix::DerivedPath> DerivationMeta::derivedPaths()
+StdVec<nix::DerivedPath> DerivationMeta::derivedPaths()
 {
 	auto derivationOutputToDerivedPath = [](DerivationOutput &output) {
 		return output.derivedPath;
@@ -167,7 +167,7 @@ std::vector<nix::DerivedPath> DerivationMeta::derivedPaths()
 
 	auto derivedPaths = iter::imap(derivationOutputToDerivedPath, this->outputs);
 
-	return std::vector<nix::DerivedPath>(derivedPaths.begin(), derivedPaths.end());
+	return StdVec<nix::DerivedPath>(derivedPaths.begin(), derivedPaths.end());
 }
 
 DrvBuilder::~DrvBuilder()
@@ -178,7 +178,7 @@ DrvBuilder::~DrvBuilder()
 
 struct PathToLink
 {
-	std::string name;
+	StdString name;
 	stdfs::path path;
 };
 
@@ -258,21 +258,21 @@ void DrvBuilder::realizeDerivations()
 	// FIXME: what needs to happen for `unknown` to not be empty?
 	assert(unknown.empty());
 
-	std::vector<nix::KeyedBuildResult> results = this->store->buildPathsWithResults(this->meta.derivedPaths());
+	StdVec<nix::KeyedBuildResult> results = this->store->buildPathsWithResults(this->meta.derivedPaths());
 	assert(!results.empty());
 
 	// Now find the output paths of this build, and symlink them!
-	std::vector<PathToLink> pathsToLink;
+	StdVec<PathToLink> pathsToLink;
 
 	for (nix::KeyedBuildResult &buildResult : results) {
-		for (std::pair<std::string const, nix::Realisation> &outPair : buildResult.builtOutputs) {
+		for (std::pair<StdString const, nix::Realisation> &outPair : buildResult.builtOutputs) {
 			auto [name, realization] = outPair;
 			pathsToLink.emplace_back(name, this->store->printStorePath(realization.outPath));
 		}
 	}
 
 	for (auto const &[name, targetPath] : pathsToLink) {
-		std::string linkBasename = (pathsToLink.size() == 1) ? "result" : fmt::format("result-{}", name);
+		StdString linkBasename = (pathsToLink.size() == 1) ? "result" : fmt::format("result-{}", name);
 		auto linkName = stdfs::current_path().append(linkBasename);
 
 		maybeReplaceNixSymlink(*this->store, targetPath, linkName);
