@@ -1,7 +1,7 @@
 {
   inputs = {
-    nixpkgs.url = "nixpkgs";
-    flake-utils.url = "flake-utils";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs = { self, nixpkgs, flake-utils }:
@@ -31,6 +31,5 @@
       devShells.default = pkgs.callPackage xil.mkShell { };
       checks = self.outputs.packages.${system};
     }) # eachDefaultSystem
-
   ; # outputs
 }
