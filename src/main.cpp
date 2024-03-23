@@ -397,7 +397,28 @@ int main(int argc, char *argv[])
 		Printer printer(state, evalArgs.safe(), evalArgs.shortErrors(), shortDrvs);
 
 		try {
-			if (state->isDerivation(rootVal) && shortDrvsOpt == "auto") {
+			// TODO: check flag/subcommand for showing location
+			if (true) {
+				if (state->isDerivation(rootVal)) {
+					// EvalState contains a few constant symbols for easy access,
+					// "meta" is one of them
+					auto metaAttr = rootVal.attrs->get(state->sMeta);
+					if (metaAttr != NULL) {
+						auto metaVal = metaAttr->value;
+						//printer.printValue(metaVal, std::cout, 0, 0);
+						//return 0;
+						// no constant symbol for position, so we have to make
+						// it manually.
+						auto sPosition = state->symbols.create("position");
+						auto posAttr = metaVal->attrs->get(sPosition);
+						if (posAttr != NULL) {
+							// derivation definition position
+							printer.printValue(*posAttr->value, std::cout, 0, 0);
+						}
+					}
+					//
+				}
+			} else if (state->isDerivation(rootVal) && shortDrvsOpt == "auto") {
 				// If we're printing this derivation "not-short", then run the attr printer manually.
 				printer.printAttrs(rootVal.attrs, std::cout, 0, 0);
 			} else {
