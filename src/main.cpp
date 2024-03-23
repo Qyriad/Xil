@@ -289,12 +289,14 @@ struct XilArgs
 
 	ArgumentParser evalCmd;
 	ArgumentParser printCmd;
+	ArgumentParser posCmd;
 	ArgumentParser buildCmd;
 
 	XilArgs(int argc, char *argv[]) :
 		parser(ArgumentParser{"xil"}),
 		evalCmd(ArgumentParser{"eval"}),
 		printCmd(ArgumentParser{"print"}),
+		posCmd(ArgumentParser{"pos"}),
 		buildCmd(ArgumentParser{"build"})
 	{
 		this->parser.add_subparser(this->evalCmd);
@@ -306,6 +308,12 @@ struct XilArgs
 		this->printCmd.add_description("Alias for eval --safe --short-errors --short-derivations=auto");
 		addExprArguments(this->printCmd);
 		addEvalArguments(this->printCmd, true);
+
+		this->parser.add_subparser(this->posCmd);
+		this->printCmd.add_description("Print the source position a function or derivation is defined at");
+		addExprArguments(this->posCmd);
+		addEvalArguments(this->posCmd, false);		
+
 
 		this->parser.add_subparser(this->buildCmd);
 		this->buildCmd.add_description("Build the derivation evaluated from a Nix expression");
@@ -331,6 +339,13 @@ struct XilArgs
 				this->printCmd, //printCmd
 				this->evalCmd // evalCmd
 			};
+		} else if (this->parser.is_subcommand_used(this->posCmd)) {
+			return XilPrinterArgs{
+				this->parser, // root
+				this->posCmd, // evalParser
+				this->printCmd, //printCmd
+				this->evalCmd // evalCmd
+			};
 		}
 
 		return std::nullopt;
@@ -351,6 +366,49 @@ struct XilArgs
 		return std::nullopt;
 	}
 };
+
+void describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambdaVal)
+{
+	if (lambdaVal.isLambda()) {
+		auto lambdaPos = state->positions[lambdaVal.lambda.fun->pos];
+		// it seems that "<<" is the only interface Pos provides
+		// for printing itself.
+		std::cout << "lambda defined at: " << lambdaPos << std::endl;
+	}
+}
+
+void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
+{
+	using nix::Value;
+	if (state->isDerivation(rootVal)) {
+		// EvalState contains a few constant symbols for easy access,
+		// "meta" is one of them
+		auto metaAttr = rootVal.attrs->get(state->sMeta);
+		if (metaAttr != NULL) {
+			eprintln("derivation has meta");
+			auto metaVal = metaAttr->value;
+			// no constant symbol for position, so we have to make
+			// it manually.
+			auto sPosition = state->symbols.create("position");
+			auto posAttr = metaVal->attrs->get(sPosition);
+			if (posAttr != NULL && posAttr->value->type() == nix::ValueType::nString) {
+				//nix::Value::StringWithContext posStr = posAttr->value->string;
+				// derivation definition position
+				println("package defined at: {}", posAttr->value->str());
+				//printer.printValue(*posAttr->value, std::cout, 0, 0);
+			}
+		}
+	}
+	describeLambdaPos(state, rootVal);
+	if (rootVal.type() == nix::ValueType::nAttrs) {
+		auto functorAttr = rootVal.attrs->get(state->sFunctor);
+		if (functorAttr != NULL) {
+			eprintln("has functor");
+			auto functorVal = functorAttr->value;
+			describeLambdaPos(state, *functorVal);
+		}
+	}
+}
 
 int main(int argc, char *argv[])
 {
@@ -397,27 +455,8 @@ int main(int argc, char *argv[])
 		Printer printer(state, evalArgs.safe(), evalArgs.shortErrors(), shortDrvs);
 
 		try {
-			// TODO: check flag/subcommand for showing location
-			if (true) {
-				if (state->isDerivation(rootVal)) {
-					// EvalState contains a few constant symbols for easy access,
-					// "meta" is one of them
-					auto metaAttr = rootVal.attrs->get(state->sMeta);
-					if (metaAttr != NULL) {
-						auto metaVal = metaAttr->value;
-						//printer.printValue(metaVal, std::cout, 0, 0);
-						//return 0;
-						// no constant symbol for position, so we have to make
-						// it manually.
-						auto sPosition = state->symbols.create("position");
-						auto posAttr = metaVal->attrs->get(sPosition);
-						if (posAttr != NULL) {
-							// derivation definition position
-							printer.printValue(*posAttr->value, std::cout, 0, 0);
-						}
-					}
-					//
-				}
+			if (args.parser.is_subcommand_used(args.posCmd)) {
+				describePos(state, rootVal);
 			} else if (state->isDerivation(rootVal) && shortDrvsOpt == "auto") {
 				// If we're printing this derivation "not-short", then run the attr printer manually.
 				printer.printAttrs(rootVal.attrs, std::cout, 0, 0);
