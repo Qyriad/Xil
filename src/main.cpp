@@ -373,12 +373,9 @@ void describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambd
 		state->forceValue(lambdaVal, nix::noPos);
 		auto lambdaData = lambdaVal.lambda.fun;
 		auto lambdaPos = state->positions[lambdaData->pos];
-		auto lambdaName = state->symbols[lambdaData->name];
 		// it seems that "<<" is the only interface Pos provides
 		// for printing itself.
-		std::cout << "lambda '" << lambdaName << "' defined at: " << lambdaPos << std::endl;
-	} else {
-		eprintln("not a lambda: {}", lambdaVal.type());
+		std::cout << "lambda defined at: " << lambdaPos << std::endl;
 	}
 }
 
@@ -386,17 +383,14 @@ void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 {
 	using nix::Value;
 	if (state->isDerivation(rootVal)) {
-		eprintln("is derivation");
 		// EvalState contains a few constant symbols for easy access,
 		// "meta" is one of them
 		auto metaAttr = rootVal.attrs->get(state->sMeta);
 		if (metaAttr != NULL) {
-			eprintln("derivation has meta");
 			auto metaVal = metaAttr->value;
 			// no constant symbol for position, so we have to make
 			// it manually.
 			auto sPosition = state->symbols.create("position");
-			//eprintln("key is: {}", sPosition);
 			state->forceValue(*metaVal, nix::noPos);
 			if (metaVal->type() == nix::nAttrs) {
 				auto posAttr = metaVal->attrs->get(sPosition);
@@ -406,11 +400,7 @@ void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 					if (posVal->type() == nix::ValueType::nString) {
 						println("package defined at: {}", posVal->str());
 					}
-				} else {
-					eprintln("meta does not have position");
 				}
-			} else {
-				eprintln("meta is not attrs: {}", metaVal->type());
 			}
 		}
 	}
@@ -418,7 +408,6 @@ void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 	if (rootVal.type() == nix::ValueType::nAttrs) {
 		auto functorAttr = rootVal.attrs->get(state->sFunctor);
 		if (functorAttr != NULL) {
-			eprintln("has functor");
 			auto functorVal = functorAttr->value;
 			describeLambdaPos(state, *functorVal);
 		}
