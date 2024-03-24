@@ -369,21 +369,14 @@ struct XilArgs
 
 void describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambdaVal)
 {
-	state->forceValue(lambdaVal, nix::noPos);
 	if (lambdaVal.isLambda()) {
+		state->forceValue(lambdaVal, nix::noPos);
 		auto lambdaData = lambdaVal.lambda.fun;
 		auto lambdaPos = state->positions[lambdaData->pos];
 		auto lambdaName = state->symbols[lambdaData->name];
 		// it seems that "<<" is the only interface Pos provides
 		// for printing itself.
 		std::cout << "lambda '" << lambdaName << "' defined at: " << lambdaPos << std::endl;
-	} else if (lambdaVal.isPrimOpApp()) {
-		// function application, decend to print curried function
-		describeLambdaPos(state, *lambdaVal.primOpApp.left);
-		describeLambdaPos(state, *lambdaVal.primOpApp.right);
-	} else if (lambdaVal.isApp()) {
-		describeLambdaPos(state, *lambdaVal.app.left);
-		describeLambdaPos(state, *lambdaVal.app.right);
 	} else {
 		eprintln("not a lambda: {}", lambdaVal.type());
 	}
@@ -393,6 +386,7 @@ void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 {
 	using nix::Value;
 	if (state->isDerivation(rootVal)) {
+		eprintln("is derivation");
 		// EvalState contains a few constant symbols for easy access,
 		// "meta" is one of them
 		auto metaAttr = rootVal.attrs->get(state->sMeta);
@@ -402,14 +396,21 @@ void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 			// no constant symbol for position, so we have to make
 			// it manually.
 			auto sPosition = state->symbols.create("position");
-			auto posAttr = metaVal->attrs->get(sPosition);
-			if (posAttr != NULL && posAttr->value->type() == nix::ValueType::nString) {
-				//nix::Value::StringWithContext posStr = posAttr->value->string;
-				// derivation definition position
-				println("package defined at: {}", posAttr->value->str());
-				//printer.printValue(*posAttr->value, std::cout, 0, 0);
+			//eprintln("key is: {}", sPosition);
+			state->forceValue(*metaVal, nix::noPos);
+			if (metaVal->type() == nix::nAttrs) {
+				auto posAttr = metaVal->attrs->get(sPosition);
+				if (posAttr != NULL) {
+					auto posVal = posAttr->value;
+					state->forceValue(*posVal, nix::noPos);
+					if (posVal->type() == nix::ValueType::nString) {
+						println("package defined at: {}", posVal->str());
+					}
+				} else {
+					eprintln("meta does not have position");
+				}
 			} else {
-				eprintln("meta does not have position");
+				eprintln("meta is not attrs: {}", metaVal->type());
 			}
 		}
 	}
