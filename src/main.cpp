@@ -367,7 +367,7 @@ struct XilArgs
 	}
 };
 
-void describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambdaVal)
+bool describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambdaVal)
 {
 	if (lambdaVal.isLambda()) {
 		state->forceValue(lambdaVal, nix::noPos);
@@ -375,11 +375,13 @@ void describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambd
 		auto lambdaPos = state->positions[lambdaData->pos];
 		// it seems that "<<" is the only interface Pos provides
 		// for printing itself.
-		std::cout << "lambda defined at: " << lambdaPos << std::endl;
+		std::cout << lambdaPos << std::endl;
+		return true;
 	}
+	return false;
 }
 
-void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
+bool describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 {
 	using nix::Value;
 	if (state->isDerivation(rootVal)) {
@@ -398,20 +400,22 @@ void describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 					auto posVal = posAttr->value;
 					state->forceValue(*posVal, nix::noPos);
 					if (posVal->type() == nix::ValueType::nString) {
-						println("package defined at: {}", posVal->str());
+						println("{}", posVal->str());
+						return true;
 					}
 				}
 			}
 		}
 	}
-	describeLambdaPos(state, rootVal);
+	if (describeLambdaPos(state, rootVal)) return true;
 	if (rootVal.type() == nix::ValueType::nAttrs) {
 		auto functorAttr = rootVal.attrs->get(state->sFunctor);
 		if (functorAttr != NULL) {
 			auto functorVal = functorAttr->value;
-			describeLambdaPos(state, *functorVal);
+			return describeLambdaPos(state, *functorVal);
 		}
 	}
+	return false;
 }
 
 int main(int argc, char *argv[])
@@ -460,7 +464,13 @@ int main(int argc, char *argv[])
 
 		try {
 			if (args.parser.is_subcommand_used(args.posCmd)) {
-				describePos(state, rootVal);
+				if (!describePos(state, rootVal)) {
+				  eprintln("unable to extract location info");
+				  return 1;
+				} else {
+				  // return early to prevent adding a redundant newline
+				  return 0;
+				}
 			} else if (state->isDerivation(rootVal) && shortDrvsOpt == "auto") {
 				// If we're printing this derivation "not-short", then run the attr printer manually.
 				printer.printAttrs(rootVal.attrs, std::cout, 0, 0);
