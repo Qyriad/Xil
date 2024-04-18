@@ -312,7 +312,7 @@ struct XilArgs
 		this->parser.add_subparser(this->posCmd);
 		this->printCmd.add_description("Print the source position a function or derivation is defined at");
 		addExprArguments(this->posCmd);
-		addEvalArguments(this->posCmd, false);		
+		addEvalArguments(this->posCmd, false);
 
 
 		this->parser.add_subparser(this->buildCmd);
@@ -407,7 +407,9 @@ bool describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 			}
 		}
 	}
-	if (describeLambdaPos(state, rootVal)) return true;
+	if (describeLambdaPos(state, rootVal)) {
+		return true;
+	}
 	if (rootVal.type() == nix::ValueType::nAttrs) {
 		auto functorAttr = rootVal.attrs->get(state->sFunctor);
 		if (functorAttr != NULL) {
