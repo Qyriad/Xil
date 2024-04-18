@@ -289,12 +289,14 @@ struct XilArgs
 
 	ArgumentParser evalCmd;
 	ArgumentParser printCmd;
+	ArgumentParser posCmd;
 	ArgumentParser buildCmd;
 
 	XilArgs(int argc, char *argv[]) :
 		parser(ArgumentParser{"xil"}),
 		evalCmd(ArgumentParser{"eval"}),
 		printCmd(ArgumentParser{"print"}),
+		posCmd(ArgumentParser{"pos"}),
 		buildCmd(ArgumentParser{"build"})
 	{
 		this->parser.add_subparser(this->evalCmd);
@@ -306,6 +308,12 @@ struct XilArgs
 		this->printCmd.add_description("Alias for eval --safe --short-errors --short-derivations=auto");
 		addExprArguments(this->printCmd);
 		addEvalArguments(this->printCmd, true);
+
+		this->parser.add_subparser(this->posCmd);
+		this->printCmd.add_description("Print the source position a function or derivation is defined at");
+		addExprArguments(this->posCmd);
+		addEvalArguments(this->posCmd, false);		
+
 
 		this->parser.add_subparser(this->buildCmd);
 		this->buildCmd.add_description("Build the derivation evaluated from a Nix expression");
@@ -331,6 +339,13 @@ struct XilArgs
 				this->printCmd, //printCmd
 				this->evalCmd // evalCmd
 			};
+		} else if (this->parser.is_subcommand_used(this->posCmd)) {
+			return XilPrinterArgs{
+				this->parser, // root
+				this->posCmd, // evalParser
+				this->printCmd, //printCmd
+				this->evalCmd // evalCmd
+			};
 		}
 
 		return std::nullopt;
@@ -351,6 +366,57 @@ struct XilArgs
 		return std::nullopt;
 	}
 };
+
+bool describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambdaVal)
+{
+	if (lambdaVal.isLambda()) {
+		state->forceValue(lambdaVal, nix::noPos);
+		auto lambdaData = lambdaVal.lambda.fun;
+		auto lambdaPos = state->positions[lambdaData->pos];
+		// it seems that "<<" is the only interface Pos provides
+		// for printing itself.
+		std::cout << lambdaPos << std::endl;
+		return true;
+	}
+	return false;
+}
+
+bool describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
+{
+	using nix::Value;
+	if (state->isDerivation(rootVal)) {
+		// EvalState contains a few constant symbols for easy access,
+		// "meta" is one of them
+		auto metaAttr = rootVal.attrs->get(state->sMeta);
+		if (metaAttr != NULL) {
+			auto metaVal = metaAttr->value;
+			// no constant symbol for position, so we have to make
+			// it manually.
+			auto sPosition = state->symbols.create("position");
+			state->forceValue(*metaVal, nix::noPos);
+			if (metaVal->type() == nix::nAttrs) {
+				auto posAttr = metaVal->attrs->get(sPosition);
+				if (posAttr != NULL) {
+					auto posVal = posAttr->value;
+					state->forceValue(*posVal, nix::noPos);
+					if (posVal->type() == nix::ValueType::nString) {
+						println("{}", posVal->str());
+						return true;
+					}
+				}
+			}
+		}
+	}
+	if (describeLambdaPos(state, rootVal)) return true;
+	if (rootVal.type() == nix::ValueType::nAttrs) {
+		auto functorAttr = rootVal.attrs->get(state->sFunctor);
+		if (functorAttr != NULL) {
+			auto functorVal = functorAttr->value;
+			return describeLambdaPos(state, *functorVal);
+		}
+	}
+	return false;
+}
 
 int main(int argc, char *argv[])
 {
@@ -397,7 +463,15 @@ int main(int argc, char *argv[])
 		Printer printer(state, evalArgs.safe(), evalArgs.shortErrors(), shortDrvs);
 
 		try {
-			if (state->isDerivation(rootVal) && shortDrvsOpt == "auto") {
+			if (args.parser.is_subcommand_used(args.posCmd)) {
+				if (!describePos(state, rootVal)) {
+				  eprintln("unable to extract location info");
+				  return 1;
+				} else {
+				  // return early to prevent adding a redundant newline
+				  return 0;
+				}
+			} else if (state->isDerivation(rootVal) && shortDrvsOpt == "auto") {
 				// If we're printing this derivation "not-short", then run the attr printer manually.
 				printer.printAttrs(rootVal.attrs, std::cout, 0, 0);
 			} else {
