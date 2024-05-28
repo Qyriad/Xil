@@ -1,6 +1,7 @@
 // Iterator types for Nix attrsets.
 
 #include <iterator>
+#include <span>
 
 // Nix headers.
 #include <config.h>

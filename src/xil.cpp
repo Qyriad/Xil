@@ -1,17 +1,18 @@
 #include "xil.hpp"
 
 #include <iterator>
+#include <span>
 
 // Nix headers.
 #include <nix/nixexpr.hh>
 #include <nix/print.hh>
+#include <nix/signals.hh>
 
 #include <cppitertools/itertools.hpp>
 #include <fmt/args.h>
 #include <fmt/format.h>
 
 #include "attriter.hpp"
-#include "nixcompat.h"
 
 using namespace std::literals::string_literals;
 
@@ -304,7 +305,7 @@ void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t inden
 		attrIter.end(),
 		[](std::tuple<StdStr const, nix::Value const &> pair) -> bool {
 			auto const &[name, value] = pair;
-			return name == "_type" && value.type() == nix::nString && nixValueSv(value) == "pkgs"s;
+			return name == "_type" && value.type() == nix::nString && value.str() == "pkgs"s;
 		}
 	);
 
@@ -362,7 +363,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			nix::printLiteralBool(out, value.boolean);
 			break;
 		case nix::nString:
-			out << prettyString(nixValueSv(value), indentLevel);
+			out << prettyString(value.str(), indentLevel);
 			break;
 		case nix::nPath:
 			out << value.path().to_string();
@@ -392,7 +393,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 				if (drvPath->type() != nix::nString) {
 					out << fmt::format("invalid {}", drvPath->type());
 				} else {
-					out << nixValueSv(*drvPath);
+					out << drvPath->str();
 				}
 				out << "»";
 

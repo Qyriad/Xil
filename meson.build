@@ -41,11 +41,6 @@ nix_version = dependency('nix-store').version().replace('.', '0')
 message('nix version is ' + nix_version)
 compat_conf = configuration_data()
 compat_conf.set('nix_version', nix_version)
-configure_file(
-  input : 'src/nixcompat.h.in',
-  output : 'nixcompat.h',
-  configuration: compat_conf,
-)
 
 srcs = [
   'src/main.cpp',

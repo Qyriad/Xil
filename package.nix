@@ -6,7 +6,7 @@
   pkg-config,
   cmake, # To find cppitertools
   fmt,
-  nix,
+  lix,
   boost,
   argparse,
   cppitertools,
@@ -60,12 +60,12 @@ in stdenv.mkDerivation (self: {
     meson
     ninja
     pkg-config
-    nix
+    lix
   ] ++ lib.lists.optional stdenv.isDarwin lld;
 
   buildInputs = [
     fmt
-    (nix.overrideAttrs { separateDebugInfo = true; })
+    (lix.overrideAttrs { separateDebugInfo = true; })
     boost
     cppitertools
     argparse
