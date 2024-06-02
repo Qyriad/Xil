@@ -3,6 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <memory>
+#include <ranges>
 
 // Nix headers.
 #include <nix/config.h> // IWYU pragma: keep
@@ -12,6 +13,7 @@
 #include <nix/eval.hh>
 #include <nix/eval-cache.hh>
 #include <nix/eval-settings.hh>
+#include <nix/signals.hh>
 #include <nix/flake/flake.hh>
 #include <nix/flake/flakeref.hh>
 #include <nix/input-accessor.hh>
@@ -35,7 +37,6 @@
 #include "std/string_view.hpp"
 #include "std/vector.hpp"
 
-#include "nixcompat.h" // IWYU pragma: keep
 #include "attriter.hpp"
 #include "xil.hpp"
 #include "build.hpp"
@@ -243,7 +244,7 @@ struct XilEvaluatorArgs
 					instFlake.what(),
 					fmt::join(requestedAttrPaths, ", ")
 				);
-				throw nix::EvalError(msg);
+				state.error<nix::EvalError>(msg).debugThrow();
 			}
 		} else {
 			assert("unreachable" == nullptr);
