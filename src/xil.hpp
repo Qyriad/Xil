@@ -2,18 +2,16 @@
 
 #pragma once
 
-#include <concepts>
 #include <functional>
 #include <iostream>
 #include <iterator>
-#include <source_location>
 #include <stdexcept>
 #include <type_traits>
 
-// Nix headers.
-#include <nix/config.h>
-#include <nix/eval.hh>
-#include <nix/shared.hh>
+// Lix headers.
+#include <lix/config.h>
+#include <lix/libexpr/eval.hh>
+#include <lix/libmain/shared.hh>
 
 #include <argparse/argparse.hpp>
 #include <boost/core/demangle.hpp>

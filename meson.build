@@ -8,6 +8,7 @@ project(
     'buildtype=debugoptimized',
     'b_lto=true',
     'warning_level=2',
+    'cpp_std=c++2a',
   ],
 )
 
@@ -16,10 +17,10 @@ dep_names = [
   'argparse',
   'boost',
   'cppitertools',
-  'nix-cmd',
-  'nix-expr',
-  'nix-store',
-  'nix-main',
+  'lix-cmd',
+  'lix-expr',
+  'lix-store',
+  'lix-main',
 ]
 
 deps = []
@@ -37,7 +38,7 @@ settings_conf.set('callpackage_fun', get_option('callpackage_fun'))
 settings_conf.set('xillib_dir', get_option('xillib_dir'))
 configure_file(input : 'src/settings.hpp.in', output : 'settings.hpp', configuration : settings_conf)
 
-nix_version = dependency('nix-store').version().replace('.', '0')
+nix_version = dependency('lix-store').version().replace('.', '0')
 message('nix version is ' + nix_version)
 compat_conf = configuration_data()
 compat_conf.set('nix_version', nix_version)

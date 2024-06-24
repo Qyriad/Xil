@@ -7,11 +7,11 @@
 #include "xil.hpp"
 
 // nix::KeyedBuildResult
-#include <nix/build-result.hh>
+#include <lix/libstore/build-result.hh>
 // nix::Derivation
-#include <nix/derivations.hh>
+#include <lix/libstore/derivations.hh>
 // nix::Realisation
-#include <nix/realisation.hh>
+#include <lix/libstore/realisation.hh>
 
 #include <boost/algorithm/string.hpp>
 #include <cppitertools/itertools.hpp>

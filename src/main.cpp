@@ -5,27 +5,26 @@
 #include <memory>
 #include <ranges>
 
-// Nix headers.
-#include <nix/config.h> // IWYU pragma: keep
-#include <nix/attr-path.hh>
-#include <nix/attr-set.hh>
-#include <nix/canon-path.hh>
-#include <nix/eval.hh>
-#include <nix/eval-cache.hh>
-#include <nix/eval-settings.hh>
-#include <nix/signals.hh>
-#include <nix/flake/flake.hh>
-#include <nix/flake/flakeref.hh>
-#include <nix/input-accessor.hh>
-#include <nix/installable-flake.hh>
-#include <nix/nixexpr.hh>
-#include <nix/outputs-spec.hh>
-#include <nix/path.hh>
-#include <nix/search-path.hh>
-#include <nix/shared.hh>
-#include <nix/store-api.hh>
-#include <nix/util.hh>
-#include <nix/value.hh>
+// Lix headers.
+#include <lix/config.h> // IWYU pragma: keep
+#include <lix/libcmd/installable-flake.hh>
+#include <lix/libexpr/attr-path.hh>
+#include <lix/libexpr/attr-set.hh>
+#include <lix/libexpr/eval.hh>
+#include <lix/libexpr/eval-cache.hh>
+#include <lix/libexpr/eval-settings.hh>
+#include <lix/libexpr/flake/flake.hh>
+#include <lix/libexpr/flake/flakeref.hh>
+#include <lix/libexpr/nixexpr.hh>
+#include <lix/libexpr/search-path.hh>
+#include <lix/libexpr/value.hh>
+#include <lix/libmain/shared.hh>
+#include <lix/libstore/outputs-spec.hh>
+#include <lix/libstore/path.hh>
+#include <lix/libutil/canon-path.hh>
+#include <lix/libutil/signals.hh>
+#include <lix/libutil/input-accessor.hh>
+#include <lix/libstore/store-api.hh>
 
 #include <argparse/argparse.hpp>
 #include <fmt/core.h>

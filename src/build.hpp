@@ -4,32 +4,32 @@
 #include <functional>
 #include <memory>
 
-// Nix headers.
-#include <nix/config.h> // IWYU pragma: keep
+// Lix headers.
+#include <lix/config.h> // IWYU pragma: keep
 // nix::Bindings
-#include <nix/attr-set.hh>
-// nix::{DerivedPath, makeConstantStorePathRef}
-#include <nix/derived-path.hh>
+#include <lix/libexpr/attr-set.hh>
 // nix::EvalState
-#include <nix/eval.hh>
-// nix::{Verbosity, ErrorInfo}
-#include <nix/error.hh>
-// nix::DrvInfo
-#include <nix/get-drvs.hh>
+#include <lix/libexpr/eval.hh>
 // nix::noPos
-#include <nix/nixexpr.hh>
-// nix::OutputsSpec
-#include <nix/outputs-spec.hh>
-// nix::StorePath
-#include <nix/path.hh>
-// nix::ref
-#include <nix/ref.hh>
-// nix::Store
-#include <nix/store-api.hh>
+#include <lix/libexpr/nixexpr.hh>
+// nix::DrvInfo
+#include <lix/libexpr/get-drvs.hh>
 // nix::Value
-#include <nix/value.hh>
+#include <lix/libexpr/value.hh>
+// nix::{DerivedPath, makeConstantStorePathRef}
+#include <lix/libstore/derived-path.hh>
+// nix::OutputsSpec
+#include <lix/libstore/outputs-spec.hh>
+// nix::Store
+#include <lix/libstore/store-api.hh>
+// nix::StorePath
+#include <lix/libstore/path.hh>
+// nix::{Verbosity, ErrorInfo}
+#include <lix/libutil/error.hh>
+// nix::ref
+#include <lix/libutil/ref.hh>
 // nix::{Logger, ActivityId, ActivityType, ResultType, Fields}
-#include <nix/logging.hh>
+#include <lix/libutil/logging.hh>
 
 #include <fmt/core.h>
 #include <fmt/format.h>

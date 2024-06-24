@@ -1,12 +1,11 @@
 #include "xil.hpp"
 
 #include <iterator>
-#include <span>
 
-// Nix headers.
-#include <nix/nixexpr.hh>
-#include <nix/print.hh>
-#include <nix/signals.hh>
+// Lix headers.
+#include <lix/libexpr/nixexpr.hh>
+#include <lix/libexpr/print.hh>
+#include <lix/libutil/signals.hh>
 
 #include <cppitertools/itertools.hpp>
 #include <fmt/args.h>
