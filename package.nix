@@ -1,6 +1,7 @@
 {
+  callPackage,
   lib,
-  stdenv,
+  clangStdenv,
   meson,
   ninja,
   pkg-config,
@@ -9,11 +10,13 @@
   lix,
   boost,
   argparse,
-  cppitertools,
+  cppitertools ? callPackage ./cppitertools.nix { },
   clang,
   lld,
   python3,
 }: let
+
+  stdenv = clangStdenv;
 
   attrsToShell = attrs: let
     exportStrings = lib.mapAttrsToList (name: value:
@@ -84,6 +87,8 @@ in stdenv.mkDerivation (self: {
   '';
 
   passthru = {
+    inherit cppitertools;
+
     withoutCheck = self.overrideAttrs { doCheck = false; };
     checkOnly = self.overrideAttrs { dontBuild = true; };
 
@@ -130,11 +135,13 @@ in stdenv.mkDerivation (self: {
       '';
     }); # withConfig
 
-    mkShell = {
+    mkDevShell = {
       mkShell,
       clang-tools_17,
       include-what-you-use,
-    }: mkShell {
+    }: let
+      mkShell' = mkShell.override { inherit stdenv; };
+    in mkShell' {
 
       packages = [
         clang-tools_17

@@ -191,11 +191,14 @@ overloaded(Ts...) -> overloaded<Ts...>;
 /** Version of nix::ExprState::eval that returns its nix::Value instead of taking an out parameter.
  * Can be called on lvalue or rvalue references.
  */
-template <typename ExprT> requires(std::convertible_to<ExprT &&, nix::Expr>)
+template <typename ExprT> requires(std::convertible_to<ExprT &&, nix::Expr &>)
 nix::Value nixEval(nix::EvalState &state, ExprT &&expr)
 {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 	nix::Value out;
-	state.eval(&expr, out);
+#pragma clang diagnostic pop
+	state.eval(expr, out);
 	return out;
 }
 
@@ -205,7 +208,10 @@ nix::Value nixEval(nix::EvalState &state, ExprT &&expr)
 template <typename ValueT> requires(std::convertible_to<ValueT &&, nix::Value>)
 nix::Value nixCallFunction(nix::EvalState &state, ValueT &&fun, ValueT &&callOn, nix::PosIdx pos = nix::noPos)
 {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 	nix::Value out;
+#pragma clang diagnostic pop
 	state.callFunction(fun, callOn, out, pos);
 	return out;
 }

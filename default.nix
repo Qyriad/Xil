@@ -1,13 +1,8 @@
 {
   pkgs ? import <nixpkgs> { },
-}:
-
-let
+}: let
   cppitertools = pkgs.callPackage ./cppitertools.nix { };
   xil = pkgs.callPackage ./package.nix {
     inherit cppitertools;
   };
-
-in {
-  inherit xil cppitertools;
-}
+in xil

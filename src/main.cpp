@@ -49,8 +49,8 @@ nix::Value callPackage(nix::EvalState &state, nix::Value &targetValue)
 	auto rootPath = state.rootPath(nix::CanonPath::fromCwd());
 
 	// Use the user-specified expression for "call package".
-	nix::Expr *callPackageExpr = state.parseExprFromString(CALLPACKAGE_FUN, rootPath);
-	nix::Value callPackage = nixEval(state, *callPackageExpr);
+	nix::Expr &callPackageExpr = state.parseExprFromString(CALLPACKAGE_FUN, rootPath);
+	nix::Value callPackage = nixEval(state, callPackageExpr);
 
 	return nixCallFunction(state, callPackage, targetValue);
 }
@@ -167,18 +167,20 @@ struct XilEvaluatorArgs
 	*/
 	nix::Value getTargetValue(nix::EvalState &state, InstallableMode installableMode = InstallableMode::ALL) const
 	{
-		nix::Expr *expr = nullptr;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 		nix::Value outValue;
+#pragma clang diagnostic pop
 
 		if (auto const &exprStr = this->evalParser.present("--expr")) {
 			StdString const &str = exprStr.value();
-			expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
+			nix::Expr &expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
 			state.eval(expr, outValue);
 
 		} else if (auto const &exprFile = this->evalParser.present("--file")) {
 			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
 			auto const file = state.rootPath(canonExprFilePath);
-			expr = state.parseExprFromFile(file);
+			nix::Expr &expr = state.parseExprFromFile(file);
 			state.eval(expr, outValue);
 
 		} else if (auto const &flakeSpec = this->evalParser.present("--flake")) {
@@ -445,7 +447,10 @@ int main(int argc, char *argv[])
 		auto const &evalArgs = evalArgs_.value();
 		auto const &evalParser = evalArgs.evalParser;
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 		nix::Value rootVal;
+#pragma clang diagnostic pop
 
 		try {
 			rootVal = evalArgs.getTargetValue(*state);
