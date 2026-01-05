@@ -12,8 +12,10 @@
   argparse,
   cppitertools ? callPackage ./cppitertools.nix { },
   clang,
-  lld,
+  llvmPackages,
   python3,
+  capnproto,
+  wrapBintoolsWith,
 }: let
 
   stdenv = clangStdenv;
@@ -23,6 +25,10 @@
     ''export ${name}="${value}"''
     ) attrs;
   in lib.concatStringsSep "\n" exportStrings;
+
+  lldBintools = wrapBintoolsWith {
+    bintools = llvmPackages.bintools;
+  };
 
 in stdenv.mkDerivation (self: {
   pname = "xil";
@@ -57,6 +63,8 @@ in stdenv.mkDerivation (self: {
   env.NIX_CFLAGS_LINK = lib.optionalString stdenv.isDarwin "-fuse-ld=lld";
   mesonFlags = [
     "-Dxillib_dir=${./xillib}"
+    "-Dc_link_args=-fuse-ld=lld"
+    "-Dcpp_link_args=-fuse-ld=lld"
   ];
 
   nativeBuildInputs = [
@@ -64,15 +72,17 @@ in stdenv.mkDerivation (self: {
     ninja
     pkg-config
     lix
-  ] ++ lib.lists.optional stdenv.isDarwin lld;
+    lldBintools
+  ];
 
   buildInputs = [
     fmt
-    (lix.overrideAttrs { separateDebugInfo = true; })
+    lix
     boost
     cppitertools
     argparse
     cmake
+    capnproto
   ];
 
   nativeCheckInputs = [
@@ -137,14 +147,16 @@ in stdenv.mkDerivation (self: {
 
     mkDevShell = {
       mkShell,
-      clang-tools_17,
+      #clang-tools_17,
       include-what-you-use,
     }: let
       mkShell' = mkShell.override { inherit stdenv; };
     in mkShell' {
 
+      inherit (self) mesonFlags;
+
       packages = [
-        clang-tools_17
+        #clang-tools_17
         include-what-you-use
       ];
 

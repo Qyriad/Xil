@@ -1,6 +1,7 @@
 project(
   'xil',
   'cpp',
+  meson_version : '>=1.5.0',
   version : '0.0.1',
   default_options : [
     # Normally I would add prefer_static=true, but Nix is one of the few places
@@ -8,7 +9,7 @@ project(
     'buildtype=debugoptimized',
     'b_lto=true',
     'warning_level=2',
-    'cpp_std=c++2a',
+    'cpp_std=c++23',
   ],
 )
 

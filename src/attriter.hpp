@@ -4,10 +4,10 @@
 #include <span>
 
 // Nix headers.
-#include <config.h>
-#include <shared.hh>
-#include <attr-set.hh>
-#include <value.hh>
+#include <lix/config.h>
+#include <lix/libmain/shared.hh>
+#include <lix/libexpr/attr-set.hh>
+#include <lix/libexpr/value.hh>
 
 #include "std/string.hpp"
 #include "std/string_view.hpp"

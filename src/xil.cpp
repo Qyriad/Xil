@@ -1,5 +1,6 @@
 #include "xil.hpp"
 
+#include <algorithm>
 #include <iterator>
 
 // Lix headers.
@@ -10,6 +11,7 @@
 #include <cppitertools/itertools.hpp>
 #include <fmt/args.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "attriter.hpp"
 
@@ -67,16 +69,16 @@ std::optional<nix::SymbolStr> Printer::symbol(nix::Symbol &&symbol)
 		return std::nullopt;
 	}
 
-	return this->state->symbols[symbol];
+	return this->state->ctx.symbols[symbol];
 }
 
-OptString Printer::symbolStr(nix::Symbol &symbol)
+OptString Printer::symbolStr(nix::Symbol const &symbol)
 {
 	if (!symbol) {
 		return std::nullopt;
 	}
 
-	return static_cast<StdString>(this->state->symbols[symbol]);
+	return static_cast<StdString>(this->state->ctx.symbols[symbol]);
 }
 
 OptStringView Printer::symbolStrView(nix::Symbol &symbol)
@@ -85,7 +87,7 @@ OptStringView Printer::symbolStrView(nix::Symbol &symbol)
 		return std::nullopt;
 	}
 
-	return static_cast<StdStr>(this->state->symbols[symbol]);
+	return static_cast<StdStr>(this->state->ctx.symbols[symbol]);
 }
 
 nix::Value *Printer::getAttrValue(nix::Bindings *attrs, nix::Symbol key)
@@ -283,7 +285,7 @@ StdString prettyString(StdStr nixString, uint32_t indentLevel)
 
 void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t indentLevel, uint32_t depth)
 {
-	auto attrIter = AttrIterable(attrs, this->state->symbols);
+	auto attrIter = AttrIterable(attrs, this->state->ctx.symbols);
 
 	// FIXME: better heuristics for short attrsets.
 	if (attrIter.empty()) {
@@ -299,9 +301,8 @@ void Printer::printAttrs(nix::Bindings *attrs, std::ostream &out, uint32_t inden
 	}
 
 	// FIXME: hardcodes pkgs recursion.
-	auto typeIsPkgs = std::find_if(
-		attrIter.begin(),
-		attrIter.end(),
+	auto typeIsPkgs = std::ranges::find_if(
+		attrIter,
 		[](std::tuple<StdStr const, nix::Value const &> pair) -> bool {
 			auto const &[name, value] = pair;
 			return name == "_type" && value.type() == nix::nString && value.str() == "pkgs"s;
@@ -372,7 +373,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 			break;
 		case nix::nAttrs: {
 			if (this->state->isDerivation(value) && this->shortDerivations) {
-				auto drvPath = this->getAttrValue(value.attrs, this->state->sDrvPath);
+				auto drvPath = this->getAttrValue(value.attrs, this->state->ctx.s.drvPath);
 				out << "«derivation ";
 				// We handle drvPath specially because anything other than a string
 				// should be invalid, and if it is a string then we don't want to print
@@ -431,9 +432,12 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 					// If it has an argument name too, then that looks like `lambda NAME = ARG: …`.
 					// FIXME: make it clearer when it's an application of another function, if we can.
 					auto const functionName = this->symbolStr(value.lambda.fun->name);
-					auto const argName = this->symbolStr(value.lambda.fun->arg);
+					auto const argName = this->symbolStr(value.lambda.fun->pattern->name);
 					bool const needsEquals = functionName.has_value() && functionName != this->currentAttrName;
-					bool const needsSpace = needsEquals || argName.has_value() || value.lambda.fun->hasFormals();
+					auto hasFormals = [](nix::Pattern const &pat) {
+						return dynamic_cast<nix::AttrsPattern const *>(&pat) != nullptr;
+					};
+					bool const needsSpace = needsEquals || argName.has_value() || hasFormals(*value.lambda.fun->pattern);
 
 					if (needsSpace) {
 						out << " ";
@@ -444,19 +448,20 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 					if (argName.has_value()) {
 						out << argName.value() << ": ";
 					}
-					if (value.lambda.fun->hasFormals()) {
+					if (hasFormals(*value.lambda.fun->pattern)) {
 						// FIXME: print formals
 						out << "{ ";
-						auto formalToString = [&](nix::Formal &formal) {
+						auto formalToString = [&](nix::AttrsPattern::Formal const &formal) {
 							auto str = this->symbolStr(formal.name);
 							if (str.has_value()) {
 								return str.value();
 							}
 							return "«no name?»"s;
 						};
-						auto formalsNames = iter::imap(formalToString, value.lambda.fun->formals->formals);
+						auto &pat = dynamic_cast<nix::AttrsPattern &>(*value.lambda.fun->pattern);
+						auto formalsNames = iter::imap(formalToString, pat.formals);
 						out << fmt::format("{}", fmt::join(formalsNames, ", "));
-						if (value.lambda.fun->formals->ellipsis) {
+						if (pat.ellipsis) {
 							out << ", ...";
 						}
 						out << " }: ";
@@ -493,7 +498,7 @@ void Printer::printValue(nix::Value &value, std::ostream &out, uint32_t indentLe
 void Printer::printRepeatedAttrs(nix::Bindings *attrs, std::ostream &out)
 {
 	StdVec<StdString> firstFewNames;
-	for (auto const &[innerName, innerValue] : AttrIterable(attrs, this->state->symbols)) {
+	for (auto const &[innerName, innerValue] : AttrIterable(attrs, this->state->ctx.symbols)) {
 		firstFewNames.push_back(innerName);
 		// FIXME: make configurable.
 		if (firstFewNames.size() > 2) {

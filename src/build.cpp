@@ -222,10 +222,10 @@ void DrvBuilder::realizeDerivations()
 	}
 	for (nix::StorePath const &path : willBuild) {
 
-		nix::Derivation thisDerivation = this->store->derivationFromPath(path);
+		nix::Derivation thisDerivation = this->state->aio.blockOn(this->store->derivationFromPath(path));
 		nix::DerivationOutputs pathOutputs = thisDerivation.outputs;
 
-		auto derivationOutputToStorePath = [&](nix::DerivationOutputs::value_type &drvOutPair) {
+		auto derivationOutputToStorePath = [&](nix::DerivationOutputs::value_type const &drvOutPair) {
 			auto [outName, derivationOutput] = drvOutPair;
 			auto drvOutPath = derivationOutput.path(
 				*this->store, thisDerivation.name, outName);
@@ -258,7 +258,7 @@ void DrvBuilder::realizeDerivations()
 	// FIXME: what needs to happen for `unknown` to not be empty?
 	assert(unknown.empty());
 
-	StdVec<nix::KeyedBuildResult> results = this->store->buildPathsWithResults(this->meta.derivedPaths());
+	StdVec<nix::KeyedBuildResult> results = this->state->aio.blockOn(this->store->buildPathsWithResults(this->meta.derivedPaths()));
 	assert(!results.empty());
 
 	// Now find the output paths of this build, and symlink them!

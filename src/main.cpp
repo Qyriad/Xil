@@ -4,12 +4,14 @@
 #include <iostream>
 #include <memory>
 #include <ranges>
+#include <span>
 
 // Lix headers.
 #include <lix/config.h> // IWYU pragma: keep
 #include <lix/libcmd/installable-flake.hh>
 #include <lix/libexpr/attr-path.hh>
 #include <lix/libexpr/attr-set.hh>
+#include <lix/libexpr/gc-alloc.hh>
 #include <lix/libexpr/eval.hh>
 #include <lix/libexpr/eval-cache.hh>
 #include <lix/libexpr/eval-settings.hh>
@@ -21,6 +23,7 @@
 #include <lix/libmain/shared.hh>
 #include <lix/libstore/outputs-spec.hh>
 #include <lix/libstore/path.hh>
+#include <lix/libutil/async.hh>
 #include <lix/libutil/canon-path.hh>
 #include <lix/libutil/signals.hh>
 #include <lix/libutil/input-accessor.hh>
@@ -36,6 +39,7 @@
 #include "std/string_view.hpp"
 #include "std/vector.hpp"
 
+//#include "args.hpp"
 #include "attriter.hpp"
 #include "xil.hpp"
 #include "build.hpp"
@@ -44,19 +48,22 @@
 using fmt::print, fmt::println;
 using argparse::ArgumentParser;
 
+//ArgValue<std::string> nullify;
+//ArgValue<std::string>::ValueT nullify_2;
+
 nix::Value callPackage(nix::EvalState &state, nix::Value &targetValue)
 {
-	auto rootPath = state.rootPath(nix::CanonPath::fromCwd());
+	auto rootPath = nix::CanonPath::fromCwd();
 
 	// Use the user-specified expression for "call package".
-	nix::Expr &callPackageExpr = state.parseExprFromString(CALLPACKAGE_FUN, rootPath);
+	nix::Expr &callPackageExpr = state.ctx.parseExprFromString(CALLPACKAGE_FUN, rootPath);
 	nix::Value callPackage = nixEval(state, callPackageExpr);
 
 	return nixCallFunction(state, callPackage, targetValue);
 }
 
 nix::InstallableFlake parseInstallable(
-	nix::EvalState &state,
+	nix::ref<nix::eval_cache::CachingEvaluator> state,
 	StdString const &installableSpec,
 	InstallableMode installableMode = InstallableMode::BUILD
 )
@@ -78,15 +85,19 @@ nix::InstallableFlake parseInstallable(
 	flags.updateLockFile = false;
 	flags.writeLockFile = false;
 
+	nix::AsyncIoRoot aio{};
+
+	//nix::Evaluator ctx{aio, }
+
 	// We need to make a new nix::EvalState for this to be at all sound >.>
-	auto statePtr = nix::ref(std::make_shared<nix::EvalState>(
-		state.getSearchPath(),
-		state.store
-	));
+	//auto statePtr = nix::ref(std::make_shared<nix::EvalState>(
+	//	state.ctx.paths.searchPath(),
+	//	state.ctx.store
+	//));
 
 	auto installableFlake = nix::InstallableFlake(
 		nullptr,
-		statePtr,
+		state,
 		std::move(flakeRef),
 		fragment,
 		outputsSpec,
@@ -165,29 +176,32 @@ struct XilEvaluatorArgs
 	/** Gets the nix::Value from whichever of --expr, --file, and --flake was used.
 	Accordingly, this function may throw if the expression fails to evaluate.
 	*/
-	nix::Value getTargetValue(nix::EvalState &state, InstallableMode installableMode = InstallableMode::ALL) const
+	[[nodiscard]]
+	nix::Value getTargetValue(nix::ref<nix::EvalState> statePtr, nix::ref<nix::eval_cache::CachingEvaluator> evaluator, InstallableMode installableMode = InstallableMode::ALL) const
 	{
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 		nix::Value outValue;
 #pragma clang diagnostic pop
 
+		nix::EvalState &state = *statePtr;
+
 		if (auto const &exprStr = this->evalParser.present("--expr")) {
 			StdString const &str = exprStr.value();
-			nix::Expr &expr = state.parseExprFromString(str, state.rootPath(nix::CanonPath::fromCwd()));
+			nix::Expr &expr = state.ctx.parseExprFromString(str, nix::CanonPath::fromCwd());
 			state.eval(expr, outValue);
 
 		} else if (auto const &exprFile = this->evalParser.present("--file")) {
 			auto const canonExprFilePath = nix::CanonPath(exprFile.value(), nix::CanonPath::fromCwd());
-			auto const file = state.rootPath(canonExprFilePath);
-			nix::Expr &expr = state.parseExprFromFile(file);
+			auto const path = state.ctx.paths.checkSourcePath(canonExprFilePath);
+			nix::Expr &expr = state.ctx.parseExprFromFile(path);
 			state.eval(expr, outValue);
 
 		} else if (auto const &flakeSpec = this->evalParser.present("--flake")) {
 
 			// If we have a flake, then we'll be getting a Value directly, not a nix::Expr.
 			nix::InstallableFlake instFlake = parseInstallable(
-				state,
+				evaluator,
 				flakeSpec.value(),
 				installableMode
 			);
@@ -202,9 +216,9 @@ struct XilEvaluatorArgs
 			);
 
 			// We also can only do most things through the eval cache, so let's open that.
-			auto evalCache = nix::openEvalCache(state, lockedFlake);
+			auto evalCache = nix::openEvalCache(*evaluator, lockedFlake);
 			auto attrCursor = evalCache->getRoot();
-			auto asValue = attrCursor->forceValue();
+			auto asValue = attrCursor->forceValue(state);
 
 			// Now let's work on the installable fragment part.
 			// For each possible attrpath the fragment could refer to,
@@ -222,17 +236,22 @@ struct XilEvaluatorArgs
 
 				// Get the requested attr path from the installable fragment as Symbols,
 				// and then convert them to string_views.
-				auto const symToSv = [&](nix::Symbol const &sym) {
-					return static_cast<StdStr>(state.symbols[sym]);
-				};
-				StdVec<nix::Symbol> const parsedAttrPath = nix::parseAttrPath(state, requestedPath);
-				auto const range = std::ranges::transform_view(parsedAttrPath, symToSv);
-				StdVec<StdStr> attrPathParts{range.begin(), range.end()};
+				//auto const symToSv = [&](nix::Symbol const &sym) {
+				//	return static_cast<StdStr>(state.ctx.symbols[sym]);
+				//};
+				StdVec<StdString> parsedAttrPath = nix::parseAttrPath(requestedPath);
+				auto needle = parsedAttrPath
+					| std::views::transform([](StdString const &s) -> StdStr {
+						return StdStr{s};
+					})
+					| std::ranges::to<std::vector>();
+				//auto const range = std::ranges::transform_view(parsedAttrPath, symToSv);
+				//StdVec<StdStr> attrPathParts{range.begin(), range.end()};
 
 				assert(asValue.type() == nix::nAttrs);
 
-				AttrIterable currentAttrs{asValue.attrs, state.symbols};
-				OptionalRef<nix::Attr> result = currentAttrs.find_by_nested_key(state, attrPathParts);
+				AttrIterable currentAttrs{asValue.attrs, state.ctx.symbols};
+				OptionalRef<nix::Attr> result = currentAttrs.find_by_nested_key(state, needle);
 				if (result.has_value()) {
 					found = true;
 					outValue = *result->get().value;
@@ -245,7 +264,7 @@ struct XilEvaluatorArgs
 					instFlake.what(),
 					fmt::join(requestedAttrPaths, ", ")
 				);
-				state.error<nix::EvalError>(msg).debugThrow();
+				state.ctx.errors.make<nix::EvalError>(msg).debugThrow();
 			}
 		} else {
 			assert("unreachable" == nullptr);
@@ -269,16 +288,19 @@ struct XilPrinterArgs : public XilEvaluatorArgs
 	) : XilEvaluatorArgs(rootParser, evalParser), printCmd(printCmd), evalCmd(evalCmd)
 	{ }
 
+	[[nodiscard]]
 	bool isPrint() const noexcept
 	{
 		return this->root.is_subcommand_used(this->printCmd);
 	}
 
+	[[nodiscard]]
 	bool safe() const noexcept
 	{
 		return this->evalParser.get<bool>("--safe") || this->isPrint();
 	}
 
+	[[nodiscard]]
 	bool shortErrors() const noexcept
 	{
 		return this->evalParser.get<bool>("--short-errors") || this->isPrint();
@@ -374,7 +396,7 @@ bool describeLambdaPos(std::shared_ptr<nix::EvalState> state, nix::Value & lambd
 	if (lambdaVal.isLambda()) {
 		state->forceValue(lambdaVal, nix::noPos);
 		auto lambdaData = lambdaVal.lambda.fun;
-		auto lambdaPos = state->positions[lambdaData->pos];
+		auto lambdaPos = state->ctx.positions[lambdaData->pos];
 		// it seems that "<<" is the only interface Pos provides
 		// for printing itself.
 		std::cout << lambdaPos << std::endl;
@@ -389,16 +411,16 @@ bool describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 	if (state->isDerivation(rootVal)) {
 		// EvalState contains a few constant symbols for easy access,
 		// "meta" is one of them
-		auto metaAttr = rootVal.attrs->get(state->sMeta);
-		if (metaAttr != NULL) {
+		auto metaAttr = rootVal.attrs->get(state->ctx.s.meta);
+		if (metaAttr != nullptr) {
 			auto metaVal = metaAttr->value;
 			// no constant symbol for position, so we have to make
 			// it manually.
-			auto sPosition = state->symbols.create("position");
+			auto sPosition = state->ctx.symbols.create("position");
 			state->forceValue(*metaVal, nix::noPos);
 			if (metaVal->type() == nix::nAttrs) {
 				auto posAttr = metaVal->attrs->get(sPosition);
-				if (posAttr != NULL) {
+				if (posAttr != nullptr) {
 					auto posVal = posAttr->value;
 					state->forceValue(*posVal, nix::noPos);
 					if (posVal->type() == nix::ValueType::nString) {
@@ -413,8 +435,8 @@ bool describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 		return true;
 	}
 	if (rootVal.type() == nix::ValueType::nAttrs) {
-		auto functorAttr = rootVal.attrs->get(state->sFunctor);
-		if (functorAttr != NULL) {
+		auto functorAttr = rootVal.attrs->get(state->ctx.s.functor);
+		if (functorAttr != nullptr) {
 			auto functorVal = functorAttr->value;
 			return describeLambdaPos(state, *functorVal);
 		}
@@ -422,24 +444,48 @@ bool describePos(std::shared_ptr<nix::EvalState> state, nix::Value & rootVal)
 	return false;
 }
 
+auto openCachingEvaluatorOrDie(nix::AsyncIoRoot &aio, nix::ref<nix::Store> store) -> nix::ref<nix::eval_cache::CachingEvaluator>
+{
+	nix::SearchPath sp{};
+	auto nullable = std::allocate_shared<nix::eval_cache::CachingEvaluator>(
+		nix::TraceableAllocator<nix::EvalState>(),
+		aio,
+		sp,
+		store,
+		store,
+		nullptr
+	);
+	assert(nullable != nullptr);
+	return nix::ref<nix::eval_cache::CachingEvaluator>::unsafeFromPtr(nullable);
+}
+
 int main(int argc, char *argv[])
 {
 	XilArgs args(argc, argv);
 
+	nix::initLibStore();
+	nix::initLibExpr();
 	nix::initNix();
-	nix::initGC();
+
+	nix::initPlugins();
 
 	//nix::EvalSettings &settings = nix::evalSettings;
 	// FIXME: log IFDs, rather than disallowing them.
 	//assert(settings.set("allow-import-from-derivation", "false"));
 
+	nix::AsyncIoRoot aio{};
+
 	// FIXME: --store option
-	auto store = nix::openStore();
+	auto store = aio.blockOn(nix::openStore());
 
 	// FIXME: allow specifying SearchPath from command line.
 	auto xilEl = nix::SearchPath::Elem::parse(fmt::format("xil={}", XILLIB_DIR));
 	nix::SearchPath searchPath{std::list<nix::SearchPath::Elem>{xilEl}};
-	auto state = std::make_shared<nix::EvalState>(searchPath, store, store);
+
+	auto evaluator = openCachingEvaluatorOrDie(aio, store);
+	auto state = nix::ref<nix::EvalState>::unsafeFromPtr(evaluator->begin(aio).take());
+
+	//auto state = std::make_shared<nix::EvalState>(searchPath, store, store);
 
 	// Handle eval and print commands.
 	if (auto evalArgs_ = args.getPrinterArgs()) {
@@ -453,7 +499,7 @@ int main(int argc, char *argv[])
 #pragma clang diagnostic pop
 
 		try {
-			rootVal = evalArgs.getTargetValue(*state);
+			rootVal = evalArgs.getTargetValue(state, evaluator);
 			if (evalParser.get<bool>("--call-package") && rootVal.isLambda()) {
 				rootVal = callPackage(*state, rootVal);
 			}
@@ -496,7 +542,7 @@ int main(int argc, char *argv[])
 	} else if (args.parser.is_subcommand_used("build")) {
 		auto evalArgs = args.getEvalArgs().value();
 		try {
-			nix::Value rootVal = evalArgs.getTargetValue(*state, InstallableMode::BUILD);
+			nix::Value rootVal = evalArgs.getTargetValue(state, evaluator, InstallableMode::BUILD);
 
 			if (args.buildCmd.get<bool>("--call-package")) {
 				rootVal = callPackage(*state, rootVal);

@@ -7,6 +7,7 @@
 #include <iterator>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 // Lix headers.
 #include <lix/config.h>
@@ -284,11 +285,11 @@ struct Printer
 	bool shortDerivations;
 
 	explicit Printer(std::shared_ptr<nix::EvalState> state, bool safe, bool shortErrors, bool shortDerivations) :
-		state(state), safe(safe), shortErrors(shortErrors), shortDerivations(shortDerivations)
+		state(std::move(state)), safe(safe), shortErrors(shortErrors), shortDerivations(shortDerivations)
 	{ }
 
 	// Gets a StdString for a nix::Symbol, checking if the Symbol is invalid first.
-	OptString symbolStr(nix::Symbol &symbol);
+	OptString symbolStr(nix::Symbol const &symbol);
 
 	// Gets a StdStr for a nix::Symbol.
 	// TODO: Is this...safe?

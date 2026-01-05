@@ -20,8 +20,9 @@ for entry in commands_json:
     replaced = entry['command'].replace('-I/nix/store', '-isystem /nix/store')
     # Then split it...
     split_cmd = shlex.split(replaced)
+    split_cmd.remove('-c')
     # ..And replace gcc with clang.
-    final = ['clang++', '-fsyntax-only', '-Werror', '-Wpedantic', *split_cmd[1:]]
+    final = ['clang++', '-fsyntax-only', '-Werror', '-Wpedantic', '-Wno-unused-command-line-argument', *split_cmd[1:]]
     commands.append(final)
 
 for command in commands:

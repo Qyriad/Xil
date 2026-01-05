@@ -33,6 +33,7 @@
 
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include "std/string.hpp"
 #include "std/string_view.hpp"
@@ -128,10 +129,10 @@ struct DerivationMeta
 	  does not have a drvPath.
 	*/
 	explicit DerivationMeta(nix::EvalState &state, nix::Bindings *attrs) :
-		drvInfo(nix::DrvInfo{state, ""s, attrs}),
-		drvPath(drvInfo.requireDrvPath())
+		drvInfo(nix::DrvInfo{""s, attrs}),
+		drvPath(drvInfo.requireDrvPath(state))
 	{
-		auto outputNamePathMap = this->drvInfo.queryOutputs();
+		auto outputNamePathMap = this->drvInfo.queryOutputs(state);
 		for (auto const &[outName, outPath] : outputNamePathMap) {
 			assert(outPath.has_value());
 			auto derivedPath = nix::DerivedPath::Built {
