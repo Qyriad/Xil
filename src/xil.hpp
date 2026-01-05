@@ -39,6 +39,12 @@ concept Callable = requires(T v, V foo) {
 	{ v(foo) -> R };
 };
 
+template <typename T>
+struct WithSelf
+{
+	using Self = T;
+};
+
 //template <
 //	//typenamet RangeT,
 //	//typename CallableT,
@@ -117,7 +123,7 @@ template <>
 struct fmt::formatter<argparse::ArgumentParser> : fmt::ostream_formatter { };
 
 template <typename T>
-concept ArithmeticT = std::is_arithmetic<T>::value;
+concept ArithmeticT = std::is_arithmetic_v<T>;
 
 /** Naïvely pluralize an english noun if the specified number is not 1. Otherwise return the as-is. */
 template <ArithmeticT T>
@@ -239,16 +245,16 @@ struct ToVec
 
 	using value_type = std::iter_value_t<IterT>;
 
-	template <typename RangeT>
-	ToVec(RangeT &&range) : begin(range.begin()), end(range.end()) { }
+	template <std::ranges::range RangeT>
+	constexpr explicit ToVec(RangeT &&range) : begin(range.begin()), end(range.end()) { }
 
 	template <typename ValueT>
-	operator StdVec<ValueT>() const
+	constexpr operator StdVec<ValueT>() const
 	{
 		return std::vector{this->begin, this->end()};
 	}
 
-	operator StdVec<value_type>() const
+	constexpr operator StdVec<value_type>() const
 	{
 		return std::vector{this->begin(), this->end()};
 	}
@@ -358,7 +364,9 @@ struct InstallableMode
 	// above conversion operator.
 	explicit operator bool() = delete;
 
+	[[nodiscard]]
 	StdList<StdString> defaultFlakeAttrPaths(StdStr const system) const;
+	[[nodiscard]]
 	StdList<StdString> defaultFlakeAttrPrefixes(StdStr const system) const;
 };
 

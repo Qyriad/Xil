@@ -1,42 +1,46 @@
 #include "attriter.hpp"
 
-#include <span>
 #include <lix/libexpr/value.hh>
+
+#include "std/span.hpp"
 
 #include "xil.hpp"
 
-AttrKeyValueIter::reference AttrKeyValueIter::operator*() const
+AttrKeyValueIter::reference AttrKeyValueIter::operator*(this Self const &self)
 {
-	StdString const name = (*this->symbols)[this->current->name];
+	StdString const name = (*self.symbols)[self.current->name];
 	// We need a persistent reference, so keep this string alive in this class's vector.
-	this->referredNames.push_back(name);
-	nix::Value &value = *this->current->value;
-	return std::tie(this->referredNames.back(), value);
+	self.referredNames.push_back(name);
+	nix::Value &value = *self.current->value;
+	return std::tie(self.referredNames.back(), value);
 }
 
-AttrKeyValueIter::pointer AttrKeyValueIter::operator->()
+AttrKeyValueIter::pointer AttrKeyValueIter::operator->(this Self &self)
 {
-	StdString const name = (*this->symbols)[this->current->name];
+	StdString const name = (*self.symbols)[self.current->name];
 	// We need a persistent reference, so keep this string alive in this class's vector.
-	this->referredNames.push_back(name);
-	nix::Value *value = this->current->value;
-	return std::tie(this->referredNames.back(), value);
+	self.referredNames.push_back(name);
+	nix::Value *value = self.current->value;
+	return std::tie(self.referredNames.back(), value);
 }
 
-AttrKeyValueIter &AttrKeyValueIter::operator++()
+AttrKeyValueIter &AttrKeyValueIter::operator++(this Self &self)
 {
-	this->current++;
-	return *this;
+	self.current++;
+	return self;
 }
 
-AttrKeyValueIter AttrKeyValueIter::operator++(int)
+AttrKeyValueIter AttrKeyValueIter::operator++(this Self &self, int)
 {
-	AttrKeyValueIter prev = *this;
-	++(*this);
+	AttrKeyValueIter prev = self;
+	++self;
 	return prev;
 }
 
 AttrKeyValueIter & AttrKeyValueIter::operator=(AttrKeyValueIter const &rhs) noexcept {
+	if (this == &rhs) {
+		return *this;
+	}
 	this->current = rhs.current;
 	this->symbols = rhs.symbols;
 	return *this;
@@ -44,12 +48,12 @@ AttrKeyValueIter & AttrKeyValueIter::operator=(AttrKeyValueIter const &rhs) noex
 
 AttrKeyValueIter AttrIterable::begin() const
 {
-	return AttrKeyValueIter(this->attrs->begin(), &this->symbols);
+	return {this->attrs->begin(), &this->symbols};
 }
 
 AttrKeyValueIter AttrIterable::end() const
 {
-	return AttrKeyValueIter(this->attrs->end(), &this->symbols);
+	return {this->attrs->end(), &this->symbols};
 }
 
 size_t AttrIterable::size() const
@@ -83,7 +87,7 @@ OptionalRef<nix::Attr> AttrIterable::find_by_key(StdStr needle)
 	return std::nullopt;
 }
 
-OptionalRef<nix::Attr> AttrIterable::find_by_nested_key(nix::EvalState &state, std::span<StdStr> needleSpec)
+OptionalRef<nix::Attr> AttrIterable::find_by_nested_key(nix::EvalState &state, StdSpan<StdStr> needleSpec)
 {
 	if (needleSpec.empty()) {
 		return std::nullopt;
@@ -95,7 +99,7 @@ OptionalRef<nix::Attr> AttrIterable::find_by_nested_key(nix::EvalState &state, s
 		return std::nullopt;
 	}
 
-	std::span<StdStr> rest = needleSpec.subspan(1);
+	StdSpan<StdStr> rest = needleSpec.subspan(1);
 
 	// If we don't have any more attrs to recurse into, then this is The One.
 	if (rest.empty()) {

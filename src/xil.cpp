@@ -505,7 +505,7 @@ void Printer::printRepeatedAttrs(nix::Bindings *attrs, std::ostream &out)
 			break;
 		}
 	}
-	firstFewNames.push_back("…");
+	firstFewNames.emplace_back("…");
 
 	out << fmt::format(" {}", fmt::join(firstFewNames, ", "));
 }

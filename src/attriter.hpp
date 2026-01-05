@@ -1,7 +1,6 @@
 // Iterator types for Nix attrsets.
 
 #include <iterator>
-#include <span>
 
 // Nix headers.
 #include <lix/config.h>
@@ -9,12 +8,13 @@
 #include <lix/libexpr/attr-set.hh>
 #include <lix/libexpr/value.hh>
 
+#include "std/span.hpp"
 #include "std/string.hpp"
 #include "std/string_view.hpp"
 #include "std/vector.hpp"
 #include "xil.hpp"
 
-struct AttrKeyValueIter
+struct AttrKeyValueIter : WithSelf<AttrKeyValueIter>
 {
 	using iterator_category = std::forward_iterator_tag;
 	using difference_type = ptrdiff_t;
@@ -29,7 +29,7 @@ struct AttrKeyValueIter
 	nix::Attr *current;
 	nix::SymbolTable *symbols;
 
-    AttrKeyValueIter() = default;
+	AttrKeyValueIter() = default;
 
 	AttrKeyValueIter(nix::Attr *current, nix::SymbolTable *symbols) :
 		current(current),
@@ -45,15 +45,15 @@ struct AttrKeyValueIter
 	// Copy assignment operator. Required for std::input_iterator.
 	AttrKeyValueIter &operator=(AttrKeyValueIter const &rhs) noexcept;
 
-	reference operator*() const;
+	reference operator*(this Self const &self);
 
-	pointer operator->();
+	pointer operator->(this Self &self);
 
 	// Prefix increment.
-	AttrKeyValueIter &operator++();
+	AttrKeyValueIter &operator++(this Self &self);
 
 	// Postfix increment, apparently.
-	AttrKeyValueIter operator++(int);
+	AttrKeyValueIter operator++(this Self &self, int);
 
 	friend bool operator==(AttrKeyValueIter const &lhs, AttrKeyValueIter const &rhs) noexcept;
 
@@ -80,14 +80,18 @@ struct AttrIterable
 	// Copy assignment operator, since the default is implicitly deleted.
 	AttrIterable &operator=(AttrIterable &&rhs);
 
+	[[nodiscard]]
 	AttrKeyValueIter begin() const;
 
+	[[nodiscard]]
 	AttrKeyValueIter end() const;
 
+	[[nodiscard]]
 	size_t size() const;
 
+	[[nodiscard]]
 	bool empty() const;
 
 	OptionalRef<nix::Attr> find_by_key(StdStr const needle);
-	OptionalRef<nix::Attr> find_by_nested_key(nix::EvalState &state, std::span<StdStr> needleSpec);
+	OptionalRef<nix::Attr> find_by_nested_key(nix::EvalState &state, StdSpan<StdStr> needleSpec);
 };

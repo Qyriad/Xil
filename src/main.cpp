@@ -4,7 +4,6 @@
 #include <iostream>
 #include <memory>
 #include <ranges>
-#include <span>
 
 // Lix headers.
 #include <lix/config.h> // IWYU pragma: keep
@@ -84,8 +83,6 @@ nix::InstallableFlake parseInstallable(
 	nix::flake::LockFlags flags;
 	flags.updateLockFile = false;
 	flags.writeLockFile = false;
-
-	nix::AsyncIoRoot aio{};
 
 	//nix::Evaluator ctx{aio, }
 

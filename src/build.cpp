@@ -144,7 +144,7 @@ StdVec<std::reference_wrapper<nix::StorePath>> DerivationMeta::outPaths()
 {
 	StdVec<std::reference_wrapper<nix::StorePath>> res;
 	for (auto &derivationOutput : this->outputs) {
-		res.push_back(derivationOutput.outPath);
+		res.emplace_back(derivationOutput.outPath);
 	}
 
 	return res;
@@ -161,13 +161,11 @@ StdVec<StdString> DerivationMeta::fullOutPaths(nix::Store const &store)
 
 StdVec<nix::DerivedPath> DerivationMeta::derivedPaths()
 {
-	auto derivationOutputToDerivedPath = [](DerivationOutput &output) {
-		return output.derivedPath;
-	};
-
-	auto derivedPaths = iter::imap(derivationOutputToDerivedPath, this->outputs);
-
-	return StdVec<nix::DerivedPath>(derivedPaths.begin(), derivedPaths.end());
+	return this->outputs
+		| std::views::transform([](DerivationOutput const &output) {
+			return output.derivedPath;
+		})
+		| std::ranges::to<StdVec>();
 }
 
 DrvBuilder::~DrvBuilder()
